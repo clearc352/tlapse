@@ -1,0 +1,52 @@
+# Build outputs and dependencies
+.theos/
+obj/
+packages/
+node_modules/
+dist/
+build/
+*.deb
+*.o
+*.dylib
+/layout/var/mobile/Timelapse/web/
+/camfix/layout/usr/local/bin/tlapse-camera-inject
+
+# Local archives and development history
+/*.zip
+/前端规格.md
+/阶段记录.md
+/backups/
+/deliveries/
+/evidence/
+.trellis/
+.agents/
+.codex/
+.devin/
+
+# Credentials and device runtime data; keep config.example.json public
+.env
+.env.*
+!.env.example
+.npmrc
+.netrc
+.ssh/
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+config.json
+config.local.json
+state.json
+upload-queue.json
+*.log
+/logs/
+/projects/
+/layout/var/mobile/Timelapse/logs/
+/layout/var/mobile/Timelapse/projects/
+
+# Editor and OS files
+.DS_Store
+._*
+*.swp
+*~

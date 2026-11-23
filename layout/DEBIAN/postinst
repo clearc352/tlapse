@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+ROOT=/var/mobile/Timelapse
+mkdir -p "$ROOT/logs" "$ROOT/projects" "$ROOT/web"
+if [ ! -f "$ROOT/config.json" ]; then
+    cp "$ROOT/config.example.json" "$ROOT/config.json"
+fi
+chown -R mobile:mobile "$ROOT"
+chmod 755 "$ROOT" "$ROOT/logs" "$ROOT/projects" "$ROOT/web"
+chmod 600 "$ROOT/config.json"
+chown root:wheel /Library/LaunchDaemons/com.ddxyl.tlapsed.plist
+chmod 644 /Library/LaunchDaemons/com.ddxyl.tlapsed.plist
+chown root:wheel /usr/local/bin/tlapsed
+chmod 755 /usr/local/bin/tlapsed
+launchctl unload /Library/LaunchDaemons/com.ddxyl.tlapsed.plist >/dev/null 2>&1 || true
+if ! launchctl load -w /Library/LaunchDaemons/com.ddxyl.tlapsed.plist; then
+    echo "tlapsed 已安装，但 launchctl load 失败。越狱完成后执行："
+    echo "  launchctl load -w /Library/LaunchDaemons/com.ddxyl.tlapsed.plist"
+fi
+exit 0

@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+mkdir -p /var/mobile/Timelapse/logs
+chown mobile:mobile /var/mobile/Timelapse/logs
+chmod 755 /usr/local/bin/tlapse-camera-inject /usr/lib/TlapseCameraFix.dylib
+chown root:wheel /Library/LaunchDaemons/com.ddxyl.tlapse-camera.plist /usr/local/bin/tlapse-camera-inject /usr/lib/TlapseCameraFix.dylib
+chmod 644 /Library/LaunchDaemons/com.ddxyl.tlapse-camera.plist
+launchctl unload /Library/LaunchDaemons/com.ddxyl.tlapse-camera.plist >/dev/null 2>&1 || true
+launchctl load -w /Library/LaunchDaemons/com.ddxyl.tlapse-camera.plist
+exit 0

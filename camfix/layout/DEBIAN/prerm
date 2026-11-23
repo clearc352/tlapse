@@ -1,0 +1,8 @@
+#!/bin/sh
+launchctl unload /Library/LaunchDaemons/com.ddxyl.tlapse-camera.plist >/dev/null 2>&1 || true
+pid=$(ps aux | grep '/usr/sbin/mediaserverd' | grep -v grep | head -n 1 | tr -s ' ' | cut -d ' ' -f 2)
+if [ -n "$pid" ]; then
+    kill "$pid" >/dev/null 2>&1 || true
+fi
+rm -f /var/mobile/Timelapse/logs/camera-fix.ready /var/mobile/Timelapse/logs/camera-fix.loaded /var/mobile/Timelapse/logs/camera-fix-hook.log /tmp/tlapse-camera.ready /tmp/tlapse-camera.loaded /tmp/tlapse-camera.log /var/tmp/tlapse-camera.ready /var/tmp/tlapse-camera.loaded /var/tmp/tlapse-camera.log
+exit 0

@@ -1,0 +1,122 @@
+// 经真实 socket 校验字节响应，二进制媒体不转换为 UTF-8。
+static NSDictionary *TLFileCall(uint16_t port, NSString *method, NSString *path, NSString *range, BOOL authorized) {
+    NSString *request = [NSString stringWithFormat:@"%@ %@ HTTP/1.1\r\nHost: 127.0.0.1:%u\r\n%@%@Connection: close\r\n\r\n", method, path, port,
+                         authorized ? @"Authorization: Bearer correct-horse-battery\r\n" : @"",
+                         range ? [NSString stringWithFormat:@"Range: %@\r\n", range] : @""];
+    NSData *data = TLRawHTTPData(port, request);
+    if (!data) { return @{}; }
+    NSRange split = [data rangeOfData:[NSData dataWithBytes:"\r\n\r\n" length:4] options:0 range:NSMakeRange(0, data.length)];
+    if (split.location == NSNotFound) { return @{}; }
+    NSString *headers = [[NSString alloc] initWithData:[data subdataWithRange:NSMakeRange(0, split.location)] encoding:NSUTF8StringEncoding];
+    NSData *body = [data subdataWithRange:NSMakeRange(NSMaxRange(split), data.length - NSMaxRange(split))];
+    return @{@"head": headers ?: @"", @"body": body};
+}
+
+static int TLDescriptorCount(void) {
+    int count = 0;
+    for (int fd = 0; fd < getdtablesize(); fd++) { if (fcntl(fd, F_GETFD) >= 0) { count++; } }
+    return count;
+}
+
+static int TLStartVideoRequest(uint16_t port, NSString *url) {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in address = TLIPv4("127.0.0.1"); address.sin_port = htons(port);
+    struct timeval timeout = {5, 0}; setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    if (connect(fd, (struct sockaddr *)&address, sizeof(address)) != 0) { close(fd); return -1; }
+    NSString *request = [NSString stringWithFormat:@"GET %@ HTTP/1.1\r\nHost: 127.0.0.1:%u\r\nAuthorization: Bearer correct-horse-battery\r\n\r\n", url, port];
+    write(fd, request.UTF8String, strlen(request.UTF8String));
+    return fd;
+}
+
+static void TLTestWebFiles(void) {
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *root = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
+    NSString *web = [root stringByAppendingPathComponent:@"web"];
+    [fm createDirectoryAtPath:[web stringByAppendingPathComponent:@"assets"] withIntermediateDirectories:YES attributes:nil error:nil];
+    [@"<title>same-root</title>" writeToFile:[web stringByAppendingPathComponent:@"index.html"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    NSDictionary *assets = @{@"app.js": @"text/javascript", @"app.css": @"text/css", @"icon.svg": @"image/svg+xml", @"font.woff": @"font/woff", @"font.woff2": @"font/woff2"};
+    for (NSString *name in assets) { [@"asset" writeToFile:[web stringByAppendingPathComponent:[@"assets" stringByAppendingPathComponent:name]] atomically:YES encoding:NSUTF8StringEncoding error:nil]; }
+    NSString *outside = [root stringByAppendingPathComponent:@"private.js"];
+    [@"private" writeToFile:outside atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    [fm createSymbolicLinkAtPath:[web stringByAppendingPathComponent:@"escape.js"] withDestinationPath:outside error:nil];
+    [fm createSymbolicLinkAtPath:[web stringByAppendingPathComponent:@"linked"] withDestinationPath:root error:nil];
+    TLConfig *config = [TLConfig configWithDictionary:@{@"server": @{@"token": @"correct-horse-battery"}, @"projects": @[@{@"id": @"plant", @"name": @"测试"}]} error:nil];
+    // 仅夹具绕过生产 storageRoot 配置约束，数据全部位于系统临时目录。
+    [config setValue:root forKey:@"storageRoot"];
+    TLState *state = [[TLState alloc] initWithPath:[root stringByAppendingPathComponent:@"state.json"]];
+    TLWebServer *server = [[TLWebServer alloc] initWithConfigPath:[root stringByAppendingPathComponent:@"config.json"] state:state snap:nil];
+    server.indexFileOverride = [web stringByAppendingPathComponent:@"index.html"];
+    EXPECT([server startLoopbackForTests:config error:nil], "file server starts");
+    uint16_t port = server.port;
+    NSDictionary *index = TLFileCall(port, @"GET", @"/", nil, NO);
+    EXPECT([index[@"head"] containsString:@"script-src 'self'"] && [index[@"head"] containsString:@"font-src 'self'"] && ![index[@"head"] containsString:@"script-src 'unsafe-inline'"], "same-origin CSP with local fonts");
+    NSDictionary *head = TLFileCall(port, @"HEAD", @"/", nil, NO);
+    EXPECT([head[@"body"] length] == 0 && [head[@"head"] containsString:@" 200 "], "static HEAD has no body");
+    for (NSString *name in assets) {
+        NSDictionary *r = TLFileCall(port, @"GET", [@"/assets/" stringByAppendingString:name], nil, NO);
+        EXPECT([r[@"head"] containsString:assets[name]] && [r[@"body"] length] == 5, "asset MIME and public access");
+    }
+    for (NSString *path in @[@"/assets/missing.js", @"/assets/", @"/.hidden.js", @"/%2e%2e/private.js", @"/escape.js", @"/linked/private.js", @"/unknown", @"/config.json"]) {
+        EXPECT([TLFileCall(port, @"GET", path, nil, NO)[@"head"] containsString:@" 404 "], "invalid or escaping asset is 404");
+    }
+    EXPECT([TLFileCall(port, @"POST", @"/assets/app.js", nil, NO)[@"head"] containsString:@" 405 "], "static mutations rejected");
+    EXPECT([TLFileCall(port, @"GET", @"/api/missing", nil, YES)[@"head"] containsString:@" 404 "], "unknown API never returns HTML");
+    server.indexFileOverride = [[web stringByAppendingPathComponent:@"linked"] stringByAppendingPathComponent:@"index.html"];
+    EXPECT([TLFileCall(port, @"GET", @"/private.js", nil, NO)[@"head"] containsString:@" 404 "], "symlink resource root rejected");
+    server.indexFileOverride = [web stringByAppendingPathComponent:@"index.html"];
+    NSString *videoDir = [root stringByAppendingPathComponent:@"projects/plant/videos"];
+    [fm createDirectoryAtPath:videoDir withIntermediateDirectories:YES attributes:nil error:nil];
+    NSMutableData *video = [NSMutableData dataWithLength:21 * 1024 * 1024 + 13];
+    uint8_t *bytes = video.mutableBytes;
+    for (NSUInteger i = 0; i < video.length; i++) { bytes[i] = (uint8_t)(i % 251); }
+    NSString *videoPath = [videoDir stringByAppendingPathComponent:@"large.mp4"];
+    [video writeToFile:videoPath atomically:YES];
+    NSString *url = @"/api/projects/plant/media/videos/large.mp4";
+    EXPECT([TLFileCall(port, @"GET", url, nil, NO)[@"head"] containsString:@" 401 "], "private video needs authentication");
+    NSDictionary *full = TLFileCall(port, @"GET", url, nil, YES);
+    EXPECT([full[@"head"] containsString:@" 200 "] && [full[@"body"] isEqualToData:video], "video above 20MiB downloads exactly");
+    NSString *lengthHeader = [NSString stringWithFormat:@"Content-Length: %lu", (unsigned long)video.length];
+    NSString *rangeHeader = [NSString stringWithFormat:@"Content-Range: bytes */%lu", (unsigned long)video.length];
+    head = TLFileCall(port, @"HEAD", url, @"bytes=0-3", YES);
+    EXPECT([head[@"body"] length] == 0 && [head[@"head"] containsString:lengthHeader] && [head[@"head"] containsString:@" 200 "], "video HEAD reports full length, ignores Range");
+    NSArray *ranges = @[@"bytes=0-3", @"bytes=3-", @"bytes=-17", [NSString stringWithFormat:@"bytes=%lu-999999999", (unsigned long)video.length - 4]];
+    NSArray *starts = @[@0, @3, @(video.length - 17), @(video.length - 4)];
+    NSArray *lengths = @[@4, @(video.length - 3), @17, @4];
+    for (NSUInteger i = 0; i < ranges.count; i++) {
+        NSDictionary *r = TLFileCall(port, @"GET", url, ranges[i], YES);
+        NSString *expectedRange = [NSString stringWithFormat:@"Content-Range: bytes %llu-%llu/%lu", [starts[i] unsignedLongLongValue], [starts[i] unsignedLongLongValue] + [lengths[i] unsignedLongLongValue] - 1, (unsigned long)video.length];
+        NSString *expectedLength = [NSString stringWithFormat:@"Content-Length: %@\r\n", lengths[i]];
+        EXPECT([r[@"head"] containsString:expectedRange] && [r[@"head"] containsString:expectedLength], "range has exact Content-Range and Content-Length");
+        EXPECT([r[@"head"] containsString:@" 206 "] && [r[@"head"] containsString:@"Accept-Ranges: bytes"] && [r[@"body"] isEqualToData:[video subdataWithRange:NSMakeRange([starts[i] unsignedIntegerValue], [lengths[i] unsignedIntegerValue])]], "range returns correct bytes");
+    }
+    for (NSString *range in @[@"bytes=999999999-", @"bytes=3-2", @"bytes=-0", @"bytes=", @"bytes=0-1,3-4", @"items=0-1", @"bytes=18446744073709551616-"]) {
+        NSDictionary *r = TLFileCall(port, @"GET", url, range, YES);
+        EXPECT([r[@"head"] containsString:@" 416 "] && [r[@"head"] containsString:rangeHeader], "invalid range is 416 with total size");
+    }
+    NSString *photos = [root stringByAppendingPathComponent:@"projects/plant/frames/20261115"];
+    [fm createDirectoryAtPath:photos withIntermediateDirectories:YES attributes:nil error:nil];
+    [video writeToFile:[photos stringByAppendingPathComponent:@"120000.jpg"] atomically:YES];
+    EXPECT([TLFileCall(port, @"GET", @"/api/projects/plant/media/frames/20261115/120000.jpg", nil, YES)[@"head"] containsString:@" 413 "], "photos retain 20MiB limit");
+    [fm createSymbolicLinkAtPath:[videoDir stringByAppendingPathComponent:@"escape.mp4"] withDestinationPath:outside error:nil];
+    EXPECT([TLFileCall(port, @"GET", @"/api/projects/plant/media/videos/escape.mp4", nil, YES)[@"head"] containsString:@" 404 "], "media symlink rejected");
+    int before = TLDescriptorCount();
+    for (int i = 0; i < 16; i++) {
+        int fd = TLStartVideoRequest(port, url);
+        uint8_t chunk[1024]; read(fd, chunk, sizeof(chunk));
+        struct linger reset = {1, 0}; setsockopt(fd, SOL_SOCKET, SO_LINGER, &reset, sizeof(reset)); close(fd);
+    }
+    usleep(150000);
+    EXPECT(TLDescriptorCount() == before, "disconnected video transfers release descriptors");
+    EXPECT([TLFileCall(port, @"GET", @"/api/status", nil, YES)[@"head"] containsString:@" 200 "], "disconnect releases connection slots");
+    // 传输已开始后截断文件，服务应结束不完整响应，释放句柄而不空转。
+    int fd = TLStartVideoRequest(port, url);
+    uint8_t chunk[4096]; ssize_t count = read(fd, chunk, sizeof(chunk));
+    EXPECT(count > 0, "truncation begins after response headers");
+    truncate(videoPath.fileSystemRepresentation, 0);
+    NSUInteger received = count > 0 ? (NSUInteger)count : 0;
+    while ((count = read(fd, chunk, sizeof(chunk))) > 0) { received += (NSUInteger)count; }
+    close(fd); usleep(50000);
+    EXPECT(received < video.length, "truncation closes incomplete body");
+    EXPECT(TLDescriptorCount() == before, "truncated transfer releases descriptors");
+    [server stop];
+}

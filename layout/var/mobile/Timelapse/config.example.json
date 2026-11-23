@@ -1,0 +1,80 @@
+{
+  "server": {
+    "port": 8080,
+    "token": "change-me"
+  },
+  "storage": {
+    "root": "/var/mobile/Timelapse",
+    "minFreeGB": 5
+  },
+  "uploads": {
+    "telegram": {
+      "enabled": false,
+      "botToken": "",
+      "chatId": ""
+    },
+    "webdav": {
+      "enabled": false,
+      "url": "",
+      "user": "",
+      "password": ""
+    }
+  },
+  "projects": [
+    {
+      "id": "mungbean",
+      "name": "绿豆发芽",
+      "enabled": false,
+      "capture": {
+        "interval": 300,
+        "resolution": "1920x1440",
+        "lockFocus": true,
+        "lockExposure": true,
+        "lockWhiteBalance": true,
+        "jpegQuality": 0.85,
+        "shutterSound": true,
+        "settleSeconds": 1.5,
+        "orientation": "auto",
+        "nightSkip": false
+      },
+      "encode": {
+        "every": "daily",
+        "at": "23:30",
+        "mode": "cumulative",
+        "fps": 30,
+        "targetDuration": 30
+      },
+      "upload": ["telegram"],
+      "cleanup": {
+        "keepFramesDays": 14
+      }
+    },
+    {
+      "id": "ants",
+      "name": "蚂蚁工坊",
+      "enabled": false,
+      "capture": {
+        "interval": 30,
+        "resolution": "1920x1440",
+        "lockFocus": true,
+        "lockExposure": true,
+        "lockWhiteBalance": true,
+        "jpegQuality": 0.85,
+        "shutterSound": true,
+        "settleSeconds": 1.0,
+        "orientation": "auto",
+        "nightSkip": false
+      },
+      "encode": {
+        "every": "daily",
+        "at": "00:10",
+        "mode": "daily",
+        "fps": 30
+      },
+      "upload": ["telegram", "webdav"],
+      "cleanup": {
+        "keepFramesDays": 7
+      }
+    }
+  ]
+}

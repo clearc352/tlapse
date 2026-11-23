@@ -1,0 +1,3 @@
+#!/bin/sh
+launchctl unload /Library/LaunchDaemons/com.ddxyl.tlapsed.plist >/dev/null 2>&1 || true
+exit 0
