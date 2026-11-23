@@ -36,9 +36,17 @@ static void TLTestWebFiles(void) {
     [@"<title>same-root</title>" writeToFile:[web stringByAppendingPathComponent:@"index.html"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
     NSDictionary *assets = @{@"app.js": @"text/javascript", @"app.css": @"text/css", @"icon.svg": @"image/svg+xml", @"font.woff": @"font/woff", @"font.woff2": @"font/woff2"};
     for (NSString *name in assets) { [@"asset" writeToFile:[web stringByAppendingPathComponent:[@"assets" stringByAppendingPathComponent:name]] atomically:YES encoding:NSUTF8StringEncoding error:nil]; }
+    NSDictionary *documents = @{@"MiSans-License.pdf": @"%PDF-1.4\nfixture\n%%EOF\n", @"THIRD-PARTY-LICENSES.txt": @"字体许可\nCopyright fixture\n"};
+    NSDictionary *documentTypes = @{@"MiSans-License.pdf": @"application/pdf", @"THIRD-PARTY-LICENSES.txt": @"text/plain; charset=utf-8"};
+    for (NSString *name in documents) { [documents[name] writeToFile:[web stringByAppendingPathComponent:name] atomically:YES encoding:NSUTF8StringEncoding error:nil]; }
     NSString *outside = [root stringByAppendingPathComponent:@"private.js"];
     [@"private" writeToFile:outside atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    [@"private" writeToFile:[root stringByAppendingPathComponent:@"private.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    [@"private" writeToFile:[web stringByAppendingPathComponent:@"unknown.bin"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    [@"private" writeToFile:[web stringByAppendingPathComponent:@".hidden.pdf"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
     [fm createSymbolicLinkAtPath:[web stringByAppendingPathComponent:@"escape.js"] withDestinationPath:outside error:nil];
+    [fm createSymbolicLinkAtPath:[web stringByAppendingPathComponent:@"escape.pdf"] withDestinationPath:outside error:nil];
+    [fm createSymbolicLinkAtPath:[web stringByAppendingPathComponent:@"escape.txt"] withDestinationPath:outside error:nil];
     [fm createSymbolicLinkAtPath:[web stringByAppendingPathComponent:@"linked"] withDestinationPath:root error:nil];
     TLConfig *config = [TLConfig configWithDictionary:@{@"server": @{@"token": @"correct-horse-battery"}, @"projects": @[@{@"id": @"plant", @"name": @"测试"}]} error:nil];
     // 仅夹具绕过生产 storageRoot 配置约束，数据全部位于系统临时目录。
@@ -56,8 +64,24 @@ static void TLTestWebFiles(void) {
         NSDictionary *r = TLFileCall(port, @"GET", [@"/assets/" stringByAppendingString:name], nil, NO);
         EXPECT([r[@"head"] containsString:assets[name]] && [r[@"body"] length] == 5, "asset MIME and public access");
     }
+    for (NSString *name in documents) {
+        NSString *path = [@"/" stringByAppendingString:name];
+        NSData *expected = [documents[name] dataUsingEncoding:NSUTF8StringEncoding];
+        NSString *type = [@"Content-Type: " stringByAppendingString:documentTypes[name]];
+        NSString *length = [NSString stringWithFormat:@"Content-Length: %lu", (unsigned long)expected.length];
+        NSDictionary *r = TLFileCall(port, @"GET", path, nil, NO);
+        EXPECT([r[@"head"] containsString:@" 200 "] && [r[@"head"] containsString:type] && [r[@"body"] isEqualToData:expected], "public license GET has exact MIME and bytes");
+        r = TLFileCall(port, @"HEAD", path, nil, NO);
+        EXPECT([r[@"head"] containsString:@" 200 "] && [r[@"head"] containsString:type] && [r[@"head"] containsString:length] && [r[@"body"] length] == 0, "public license HEAD has byte length without body");
+        EXPECT([TLFileCall(port, @"POST", path, nil, NO)[@"head"] containsString:@" 405 "], "license static mutations rejected");
+    }
     for (NSString *path in @[@"/assets/missing.js", @"/assets/", @"/.hidden.js", @"/%2e%2e/private.js", @"/escape.js", @"/linked/private.js", @"/unknown", @"/config.json"]) {
         EXPECT([TLFileCall(port, @"GET", path, nil, NO)[@"head"] containsString:@" 404 "], "invalid or escaping asset is 404");
+    }
+    for (NSString *path in @[@"/unknown.bin", @"/.hidden.pdf", @"/escape.pdf", @"/escape.txt", @"/linked/private.txt", @"/%2e%2e/private.txt", @"/missing.pdf"]) {
+        for (NSString *method in @[@"GET", @"HEAD"]) {
+            EXPECT([TLFileCall(port, method, path, nil, NO)[@"head"] containsString:@" 404 "], "document types do not widen file boundaries");
+        }
     }
     EXPECT([TLFileCall(port, @"POST", @"/assets/app.js", nil, NO)[@"head"] containsString:@" 405 "], "static mutations rejected");
     EXPECT([TLFileCall(port, @"GET", @"/api/missing", nil, YES)[@"head"] containsString:@" 404 "], "unknown API never returns HTML");

@@ -1,6 +1,6 @@
 // 使用系统 Chrome + Node 内置 WebSocket，经真实 TLWeb 验证交互；不新增测试依赖。
 import { spawn } from 'node:child_process'
-import { readFile, writeFile, mkdir, mkdtemp, readdir, copyFile, unlink } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, mkdtemp, readdir, copyFile, unlink, rmdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, basename } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -103,6 +103,49 @@ async function resetPhotos() {
     if (target !== source) await copyFile(source, target)
   }
 }
+async function sparsePhotoPreviews() {
+  const source = join(fixture.root, 'projects/plant/thumbs/20261114/120005.jpg')
+  for (const width of [1440, 390]) {
+    const created = [], directories = []
+    try {
+      for (const kind of ['frames', 'thumbs']) {
+        const directory = join(fixture.root, 'projects/plant', kind, '20261116')
+        await mkdir(directory)
+        directories.push(directory)
+      }
+      await command('Emulation.setDeviceMetricsOverride', { width, height: width === 390 ? 844 : 1050, deviceScaleFactor: 1, mobile: width === 390 })
+      let previous = 0
+      for (const count of [1, 2, 3, 9]) {
+        for (let i = previous; i < count; i++) for (const directory of directories) {
+          const target = join(directory, `16000${i}.jpg`)
+          await copyFile(source, target)
+          created.push(target)
+        }
+        previous = count
+        await route('/')
+        await route('/p/plant')
+        await until(() => evaluate(`document.querySelectorAll('.sample').length === ${count} && [...document.querySelectorAll('.sample img')].every(i=>i.complete&&i.naturalWidth>0)`), `${width}px ${count}张预览`)
+        const layout = await evaluate(`({
+          samples: [...document.querySelectorAll('.sample')].map(e=>{const r=e.getBoundingClientRect();return {width:r.width,height:r.height,fit:getComputedStyle(e.querySelector('img')).objectFit}}),
+          stageFit: getComputedStyle(document.querySelector('.stage-drag img')).objectFit,
+          overflow: document.documentElement.scrollWidth > innerWidth,
+          max: Number(document.querySelector('.frame-range').max)
+        })`)
+        await screenshot(`${width === 390 ? 'mobile' : 'desktop'}-sparse-${count}`)
+        assert.ok(layout.samples.every(s => s.width <= (width === 390 ? 64 : 96) + 1 && s.height > 0 && s.fit === 'cover'), JSON.stringify(layout))
+        assert.equal(layout.stageFit, 'contain')
+        assert.equal(layout.max, count - 1)
+        assert.equal(layout.overflow, false)
+        log(`${width}px ${count}张照片缩略图有界，主预览保持比例`, layout)
+      }
+    } finally {
+      await route('/')
+      for (const path of created) await unlink(path)
+      for (const directory of directories) await rmdir(directory)
+    }
+  }
+  await command('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1050, deviceScaleFactor: 1, mobile: false })
+}
 await api('DELETE', '/api/projects/browser-test')
 await api('PUT', '/api/projects/plant', { name: '本地豆苗', capture: { shutterSound: true }, encode: { targetDuration: 30 } })
 await resetPhotos()
@@ -135,13 +178,29 @@ try {
   await command('Page.navigate', { url: origin })
   await until(() => evaluate(`!!document.querySelector('#tk')`), '真实服务登录页')
   await fill('#tk', 'bad-local-token')
-  await click('form button', '进入控制台')
+  await click('form button[aria-label="进入控制台"]')
   await until(async () => (await body()).includes('口令不对'), '401 登录文案')
   await fill('#tk', fixture.token)
-  await click('form button', '进入控制台')
+  await click('form button[aria-label="进入控制台"]')
   await until(async () => (await body()).includes('本地豆苗'), '登录总览')
   await screenshot('desktop-overview')
   log('桌面登录、错误口令和真实项目总览')
+
+  await sparsePhotoPreviews()
+
+  for (const [path, type] of [['/MiSans-License.pdf', 'application/pdf'], ['/THIRD-PARTY-LICENSES.txt', 'text/plain; charset=utf-8']]) {
+    const expected = await readFile(new URL('../public' + path, import.meta.url))
+    const response = await fetch(origin + path)
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get('content-type'), type)
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), expected)
+    const head = await fetch(origin + path, { method: 'HEAD' })
+    assert.equal(head.status, 200)
+    assert.equal(head.headers.get('content-type'), type)
+    assert.equal(Number(head.headers.get('content-length')), expected.length)
+    assert.equal((await head.arrayBuffer()).byteLength, 0)
+  }
+  log('实际构建的PDF/文本许可经真实TLWeb公开GET/HEAD，类型与完整字节一致')
 
   await click('a[href="#/new"]')
   await until(() => evaluate(`!!document.querySelector('#f-id')`), '新建表单')
