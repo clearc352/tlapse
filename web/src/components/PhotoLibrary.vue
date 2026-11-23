@@ -8,6 +8,7 @@ import VirtualGrid from './VirtualGrid.vue'
 import Lightbox from './Lightbox.vue'
 import SafeImg from './SafeImg.vue'
 import Icon from './Icon.vue'
+import FrameScrubber from './FrameScrubber.vue'
 
 const props = defineProps({ projectId: String, refreshKey: Number })
 const emit = defineEmits(['changed', 'count'])
@@ -15,6 +16,7 @@ const emit = defineEmits(['changed', 'count'])
 const dates = ref(null)
 const date = ref('')
 const frames = ref([])
+const previewFrames = computed(() => [...frames.value].sort((a,b) => a.name.localeCompare(b.name)))
 const loadingFrames = ref(false)
 const ratio = ref(3 / 4)
 const density = ref(Number(localStorage.getItem('tlapse.density') || 168))
@@ -27,6 +29,7 @@ const lbIndex = ref(-1)
 const deleting = ref(false)
 const grid = ref(null)
 const strip = ref(null)
+const gridOpen = ref(false)
 
 let active = true, viewEpoch = 0, datesRequest = 0, framesRequest = 0
 const sameView = (ctx) => active && ctx.epoch === viewEpoch && ctx.projectId === props.projectId && ctx.date === date.value
@@ -170,11 +173,11 @@ defineExpose({ reload: () => loadDates(true) })
 </script>
 
 <template>
-  <section class="lib">
+  <section class="lib" :aria-busy="loadingFrames || dates === null">
     <div v-if="dates === null" class="skeleton" style="height: 320px"></div>
     <div v-else-if="!dates.length" class="empty">
       <p class="display">还没有照片</p>
-      <p>用左侧的「拍一张」手动拍一张试试构图。照片只存在手机的项目目录里，不会进入 iPhone 的「照片」。</p>
+      <p>点相机按钮，记录第一帧</p>
     </div>
 
     <template v-else>
@@ -187,17 +190,19 @@ defineExpose({ reload: () => loadDates(true) })
         <button class="btn sm icon" :disabled="dateIdx >= dates.length - 1" @click="stepDate(1)" title="更早的一天"><Icon name="chevronRight" size="14" /></button>
       </div>
 
-      <!-- 工具条：吸顶 -->
+      <FrameScrubber v-if="frames.length" :key="projectId + ':' + date" :project-id="projectId" :date="date" :frames="previewFrames" @open="lbIndex = frames.findIndex(f => f.name === $event)" />
+
+      <!-- Existing selection and virtualized grid remain available below the preview. -->
       <div class="toolbar" :class="{ sel: selecting }">
         <template v-if="!selecting">
           <div class="sum">
-            <span class="display d">{{ dateLong(date) }}</span>
             <span class="muted num">{{ num(frames.length) }} 张 · {{ bytes(dayBytes) }}</span>
           </div>
           <span class="grow"></span>
-          <label class="dens muted" title="格子大小"><Icon name="grid" size="14" /><input type="range" class="range" min="110" max="300" step="10" v-model.number="density" :style="{ '--fill': ((density - 110) / 190 * 100) + '%' }" /></label>
-          <button class="btn sm" @click="loadFrames" :disabled="loadingFrames"><Icon name="refresh" size="14" />刷新</button>
-          <button class="btn sm" :disabled="!frames.length" @click="toggleSelecting"><Icon name="select" size="14" />选择</button>
+          <label v-if="gridOpen" class="dens muted" title="格子大小"><Icon name="grid" size="14" /><input type="range" class="range" min="110" max="300" step="10" v-model.number="density" aria-label="格子大小" /></label>
+          <button class="btn sm icon" :class="{ solid: gridOpen }" @click="gridOpen = !gridOpen" title="照片网格" aria-label="照片网格" :aria-pressed="gridOpen"><Icon name="grid" size="16" /></button>
+          <button class="btn sm ghost icon" @click="loadFrames" :disabled="loadingFrames" title="刷新照片" aria-label="刷新照片"><Icon name="refresh" size="16" /></button>
+          <button class="btn sm ghost icon" :disabled="!frames.length" @click="toggleSelecting" title="选择照片" aria-label="选择照片"><Icon name="select" size="16" /></button>
         </template>
         <template v-else>
           <span class="count">已选 <b class="num">{{ selected.size }}</b> 张</span>
@@ -211,7 +216,7 @@ defineExpose({ reload: () => loadDates(true) })
 
       <div v-if="loadingFrames && !frames.length" class="skeleton" style="height: 280px"></div>
       <div v-else-if="!frames.length" class="empty">这一天没有照片了</div>
-      <VirtualGrid v-else ref="grid" :items="frames" :ratio="ratio" :min-cell="density" :gap="6">
+      <VirtualGrid v-else-if="gridOpen || selecting" ref="grid" :items="frames" :ratio="ratio" :min-cell="density" :gap="6">
         <template #default="{ item, index }">
           <button class="tile" :class="{ picked: selected.has(item.name), selecting }" @click="onCell($event, index)" :aria-label="`${item.label}${selecting ? (selected.has(item.name) ? '，已选' : '，未选') : ''}`">
             <SafeImg :src="media.thumb(projectId, item.kind, date, item.name)" :alt="item.label" />
@@ -220,7 +225,7 @@ defineExpose({ reload: () => loadDates(true) })
           </button>
         </template>
       </VirtualGrid>
-      <p v-if="frames.length" class="tip faint">点开看原图。按住 ⌘/Ctrl 点选多张，Shift 连选一段。</p>
+      <p v-if="frames.length && (gridOpen || selecting)" class="tip faint">⌘ / Ctrl 多选 · Shift 连选</p>
     </template>
 
     <Lightbox v-if="lbIndex >= 0 && frames[lbIndex]" :project-id="projectId" :date="date" :frames="frames" v-model:index="lbIndex" :deleting="deleting" @close="lbIndex = -1" @delete="deleteFromLightbox" />
@@ -234,7 +239,7 @@ defineExpose({ reload: () => loadDates(true) })
 .chip { flex: none; height: 32px; padding: 0 14px; border-radius: var(--r-full); border: 1px solid var(--border); background: transparent; color: var(--fg-muted); font-size: 13px; cursor: pointer; white-space: nowrap; transition: all var(--dur-2); }
 .chip:hover { color: var(--fg); border-color: var(--border-strong); background: var(--surface); }
 .chip.on { background: #151515; color: #fff; border-color: #151515; }
-.toolbar { position: sticky; top: calc(var(--topbar-h) + var(--frame)); z-index: 20; display: flex; align-items: center; gap: 8px; padding: 12px 0; margin-bottom: 8px; background: #ecebe6e6; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
+.toolbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 8px; padding: 12px 0; margin: 22px 0 8px; background: var(--bg); border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
 .toolbar.sel { border-bottom-color: var(--accent); }
 .sum { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .sum .d { font-size: 22px; }

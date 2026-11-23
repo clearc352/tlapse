@@ -58,16 +58,14 @@ const QUICK = [['方向', '照片写完'], ['已关闭摄像头', '摄像头关�
   <div class="shell page">
     <header class="head rise">
       <div>
-        <span class="eyebrow">守护进程日志</span>
-        <h1 class="display h-xl">最近 <em>{{ tail }}</em> 行</h1>
-        <p class="muted lead">照片是否写完要看「方向 … 尺寸=…」这一行；只有「已关闭摄像头」时文件还没落盘。快门声、合成和上传的结果也都写在这里。</p>
+        <h1 class="display h-xl">日志</h1>
       </div>
     </header>
 
     <div class="bar">
       <div class="search">
-        <Icon name="terminal" size="14" />
-        <input class="input" v-model="q" placeholder="筛选关键字…" spellcheck="false" />
+        <Icon name="search" size="16" />
+        <input class="input" v-model="q" placeholder="搜索日志" aria-label="搜索日志" spellcheck="false" />
       </div>
       <div class="seg">
         <button :class="{ on: level === 'all' }" @click="level = 'all'">全部</button>
@@ -100,9 +98,9 @@ const QUICK = [['方向', '照片写完'], ['已关闭摄像头', '摄像头关�
 </template>
 
 <style scoped>
-.page { padding-top: clamp(40px, 7vh, 88px); position: relative; }
+.page { padding-top: 42px; position: relative; }
 .head { margin-bottom: 32px; }
-.head h1 { margin: 14px 0 12px; }
+.head h1 { margin: 0; }
 .lead { max-width: 46em; font-size: 14.5px; }
 .bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .search { position: relative; width: min(320px, 100%); }
@@ -114,9 +112,9 @@ const QUICK = [['方向', '照片写完'], ['已关闭摄像头', '摄像头关�
 .qk { cursor: pointer; background: transparent; }
 .qk.on { color: #fff; background: #151515; border-color: #151515; }
 .at { margin-left: auto; font-size: 12px; }
-.term { height: min(68vh, 760px); overflow: auto; padding: 14px 0; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.7; background: var(--surface); }
+.term { height: min(68vh, 760px); overflow: auto; padding: 14px 0; font-family: var(--font-mono); font-size: 12px; line-height: 1.8; background: var(--surface); }
 .none { padding: 40px; text-align: center; font-family: var(--font-body); }
-.ln { display: grid; grid-template-columns: 72px 52px 1fr; gap: 12px; padding: 1px 18px; border-left: 2px solid transparent; }
+.ln { display: grid; grid-template-columns: 72px 52px 1fr; gap: 12px; padding: 6px 18px; border-left: 2px solid transparent; }
 .ln:hover { background: #1515150a; }
 .tm { color: var(--fg-faint); }
 .lv { color: var(--fg-faint); }
@@ -127,7 +125,7 @@ const QUICK = [['方向', '照片写完'], ['已关闭摄像头', '摄像头关�
 .ln.good .msg { color: var(--ok); }
 .ln.bad { border-left-color: var(--danger); }
 .ln.bad .msg { color: var(--danger); }
-.ln.note .msg { justify-self: start; color: var(--fg); background: linear-gradient(transparent 58%, #ffe46eb3 58% 92%, transparent 92%); }
+.ln.note .msg { justify-self: start; color: var(--fg); background: var(--wash); }
 .jump { position: absolute; right: calc(var(--gutter) + 20px); bottom: 20px; }
 @media (max-width: 640px) { .ln { grid-template-columns: 60px 1fr; } .lv { display: none; } }
 </style>
