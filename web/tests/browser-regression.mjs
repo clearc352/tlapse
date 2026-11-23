@@ -56,14 +56,16 @@ const activeDate = () => evaluate(`document.querySelector('.chip.on')?.textConte
 async function date(day) {
   const expected = dateLabel(day)
   await click('.strip .chip', expected)
-  await until(async () => (await activeDate()) === expected && await evaluate(`!document.querySelector('.lib .skeleton')`), `日期 ${day}`)
+  await until(async () => (await activeDate()) === expected && await evaluate(`!document.querySelector('.lib[aria-busy="true"]')`), `日期 ${day}`)
 }
 async function photoPage() {
   await route('/p/plant')
   await evaluate(`document.querySelector('.lib')?.scrollIntoView({block:'center'})`)
+  await until(() => evaluate(`!!document.querySelector('.toolbar button[aria-label="照片网格"]') && !document.querySelector('.lib[aria-busy="true"]')`), '照片预览')
+  if (await evaluate(`document.querySelector('.toolbar button[aria-label="照片网格"]').getAttribute('aria-pressed') !== 'true'`)) await click('.toolbar button[aria-label="照片网格"]')
   await until(async () => (await tileNames()).length > 0, '照片网格')
 }
-async function selectAll() { await click('.toolbar button', '选择'); await click('.toolbar button', '全选当天') }
+async function selectAll() { await click('.toolbar button[aria-label="选择照片"]'); await click('.toolbar button', '全选当天') }
 async function confirmDelete() {
   await click('.toolbar button', '删除')
   await until(() => evaluate(`!!document.querySelector('[role=alertdialog]')`), '删除确认')
@@ -152,7 +154,7 @@ try {
   log('浏览器新建项目默认暂停')
 
   await photoPage()
-  await click('a', '编辑参数')
+  await click('a[aria-label="编辑参数"]')
   await until(() => evaluate(`!!document.querySelector('#f-name')`), '编辑表单')
   await fill('#f-name', '本地豆苗已编辑')
   await fill('#f-td', '')
@@ -163,11 +165,13 @@ try {
   assert.deepEqual(JSON.parse(edit.body), { name: '本地豆苗已编辑', encode: { targetDuration: null } })
   log('表单仅提交更改字段、null 清空目标时长', { body: JSON.parse(edit.body) })
 
+  await photoPage()
+  await click('.parameters > summary')
   const shutterStart = events.length
   await click('[role=switch][aria-label="快门声"]')
   await until(() => events.slice(shutterStart).some((e) => e.method === 'PUT'), '快门声请求')
   assert.deepEqual(JSON.parse(events.slice(shutterStart).find((e) => e.method === 'PUT').body), { capture: { shutterSound: false } })
-  await click('.act button', '拍一张')
+  await click('.head-actions button[aria-label="拍一张"]')
   await until(async () => (await body()).includes('本地夹具已保存照片') && (await tileNames()).includes('130000.jpg'), '手动拍摄与列表刷新')
   await click('.tile')
   await until(() => evaluate(`document.querySelector('.lb .full')?.complete && document.querySelector('.lb .full')?.naturalWidth === 320`), '大图加载')
@@ -193,12 +197,12 @@ try {
   // 两次同日列表反序返回：先暂停旧刷新，拍照触发新刷新，再放行旧响应。
   let oldList
   await intercept('*/api/projects/plant/frames?date=*', (p) => { if (!oldList) { oldList = p; return true } return false })
-  await click('.toolbar button', '刷新')
+  await click('.toolbar button[aria-label="刷新照片"]')
   await until(() => oldList, '旧列表响应挂起')
   const extra = join(fixture.root, 'projects/plant/frames/20261115/140000.jpg')
   await copyFile(join(fixture.root, 'projects/plant/frames/20261115/130000.jpg'), extra)
   await copyFile(extra, join(fixture.root, 'projects/plant/thumbs/20261115/140000.jpg'))
-  await click('.act button', '拍一张')
+  await click('.head-actions button[aria-label="拍一张"]')
   await until(async () => (await tileNames()).includes('140000.jpg'), '新列表先返回')
   await command('Fetch.continueRequest', { requestId: oldList.requestId })
   await sleep(250)
@@ -209,12 +213,11 @@ try {
   // 打开确认前拍照，确认期间照片刷新并清空选择，确认仍删除发起时快照。
   await selectAll()
   const chosen = await tileNames()
-  await click('.act button', '拍一张')
+  await click('.head-actions button[aria-label="拍一张"]')
   await confirmDelete()
   const dialogBefore = await evaluate(`document.querySelector('[role=alertdialog]').innerText`)
   await until(() => evaluate(`document.querySelector('.count b')?.textContent === '0'`), '确认期间刷新清空选择')
   const deleteStart = events.length
-  const latestBeforeDelete = await evaluate(`document.querySelector('.latest img')?.src`)
   let firstDelete
   await intercept('*/api/projects/plant/frames/20261115/*', (p) => { if (p.request.method === 'DELETE' && !firstDelete) { firstDelete = p; return true } return false })
   await confirm()
@@ -223,18 +226,19 @@ try {
   await date('20261115')
   // A→B→A 后重新加载一个尚未删的同名文件，旧操作不得直接修改新视图。
   const beforeRelease = await tileNames()
+  const previewBeforeRelease = await evaluate(`document.querySelector('.stage img')?.src`)
   await command('Fetch.continueRequest', { requestId: firstDelete.requestId })
   await until(() => events.slice(deleteStart).filter((e) => e.method === 'DELETE').length === chosen.length, '快照全部删除请求')
-  await until(async () => (await evaluate(`document.querySelector('.latest img')?.src`)) !== latestBeforeDelete, '同项目切日期后侧栏最新图刷新')
   await sleep(250)
   assert.deepEqual(await tileNames(), beforeRelease)
+  assert.equal(await evaluate(`document.querySelector('.stage img')?.src`), previewBeforeRelease)
   const calls = events.slice(deleteStart).filter((e) => e.method === 'DELETE')
   assert.ok(calls.every((e) => e.url.includes('/20261115/')))
   assert.deepEqual(calls.map((e) => decodeURIComponent(e.url.split('/').pop())).sort(), chosen)
   const older = (await api('GET', '/api/projects/plant/frames?date=20261114')).data.frames
   assert.equal(older.length, 6)
   await stopIntercept()
-  log('确认期间刷新与A→B→A：请求目标固定，旧结果不改返回后的视图', { dialog: dialogBefore, deletedNames: chosen, olderDayCount: older.length, latestRefreshed: true })
+  log('确认期间刷新与A→B→A：请求目标固定，旧结果不改返回后的视图', { dialog: dialogBefore, deletedNames: chosen, olderDayCount: older.length, previewPreserved: true })
 
   await resetPhotos()
   await route('/'); await photoPage()
@@ -263,7 +267,7 @@ try {
   const singleName = (await tileNames())[0]
   let singleRefresh
   await intercept('*/api/projects/plant/frames?date=*', p=>{singleRefresh=p;return true})
-  await click('.toolbar button', '刷新')
+  await click('.toolbar button[aria-label="刷新照片"]')
   await until(()=>singleRefresh,'单张确认前刷新响应挂起')
   // 按文件名点击对应照片，而不依赖网格顺序。
   await evaluate(`document.querySelectorAll('.tile').forEach(e => { if (new URL(e.querySelector('img').src).pathname.endsWith(${JSON.stringify('/' + singleName)})) e.dataset.singleTarget='1' })`)
@@ -280,7 +284,7 @@ try {
   await evaluate(`document.querySelector('.lb button[title="关闭（Esc）"]')?.click()`)
   log('单张删除确认显示日期/文件名，删除目标正确且另一日同名照片保留')
 
-  await click('[role=tab]', '视频')
+  await click('.tabs button', '视频')
   await until(() => evaluate(`!!document.querySelector('video')`), '视频面板')
   assert.equal(await evaluate(`document.querySelector('.encode button').disabled`), true)
   assert.equal(await evaluate(`[...document.querySelectorAll('.row-v button')].find(e=>e.textContent.trim()==='上传').disabled`), true)
@@ -313,7 +317,8 @@ try {
   await until(async () => (await body()).includes('浏览器临时项目'), '临时项目')
   const kept = join(fixture.root, 'projects/browser-test/keep.txt')
   await mkdir(join(fixture.root, 'projects/browser-test'), { recursive: true }); await writeFile(kept, 'retained')
-  await click('button[title="删除项目"]')
+  await click('.parameters > summary')
+  await click('.parameter-body button', '删除项目')
   assert.ok((await evaluate(`document.querySelector('[role=alertdialog]').innerText`)).includes('不会被删除'))
   await confirm()
   await until(async () => (await evaluate('location.hash')) === '#/', '删除项目返回总览')

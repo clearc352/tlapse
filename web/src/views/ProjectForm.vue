@@ -133,9 +133,9 @@ function cancel() { router.back() }
       <router-link :to="isNew ? '/' : { name: 'project', params: { id } }" class="back"><Icon name="arrowLeft" size="14" />{{ isNew ? '总览' : '返回项目' }}</router-link>
     </nav>
     <header class="head rise">
-      <span class="eyebrow">{{ isNew ? '新建项目' : '编辑参数' }}</span>
+      <span v-if="!isNew" class="eyebrow">编辑参数</span>
       <h1 class="display h-xl">
-        <template v-if="isNew">定一个<em>新画面</em></template>
+        <template v-if="isNew">新建项目</template>
         <template v-else>{{ form.name || id }}</template>
       </h1>
     </header>
@@ -148,7 +148,7 @@ function cancel() { router.back() }
 
         <!-- 01 基本 -->
         <section class="sec">
-          <div class="sec-h"><span class="n">01</span><h2 class="display h-md">基本</h2></div>
+          <div class="sec-h"><h2 class="display h-md">基本</h2></div>
           <div class="grid2">
             <div class="field">
               <label for="f-id">id</label>
@@ -173,7 +173,7 @@ function cancel() { router.back() }
 
         <!-- 02 拍摄 -->
         <section class="sec">
-          <div class="sec-h"><span class="n">02</span><h2 class="display h-md">拍摄</h2></div>
+          <div class="sec-h"><h2 class="display h-md">拍摄</h2></div>
           <div class="field">
             <label for="f-iv">间隔</label>
             <div class="row gap-12 wrap">
@@ -235,7 +235,7 @@ function cancel() { router.back() }
 
         <!-- 03 夜间 -->
         <section class="sec">
-          <div class="sec-h"><span class="n">03</span><h2 class="display h-md">夜间跳过</h2></div>
+          <div class="sec-h"><h2 class="display h-md">夜间跳过</h2></div>
           <div class="seg">
             <button type="button" :class="{ on: form.nightMode === 'off' }" @click="form.nightMode = 'off'">关闭</button>
             <button type="button" :class="{ on: form.nightMode === 'default' }" @click="form.nightMode = 'default'">默认 22:00–06:00</button>
@@ -253,7 +253,7 @@ function cancel() { router.back() }
 
         <!-- 04 合成 -->
         <section class="sec">
-          <div class="sec-h"><span class="n">04</span><h2 class="display h-md">合成视频</h2></div>
+          <div class="sec-h"><h2 class="display h-md">合成视频</h2></div>
           <div class="grid2">
             <div class="field">
               <span class="label">周期</span>
@@ -299,7 +299,7 @@ function cancel() { router.back() }
 
         <!-- 05 清理与上传 -->
         <section class="sec">
-          <div class="sec-h"><span class="n">05</span><h2 class="display h-md">清理与上传</h2></div>
+          <div class="sec-h"><h2 class="display h-md">清理与上传</h2></div>
           <div class="field">
             <label for="f-keep">保留原图</label>
             <div class="input-unit" style="max-width: 160px"><input id="f-keep" class="input num" type="number" min="0" max="3650" v-model.number="form.keepFramesDays" :class="{ bad: showErr('keepFramesDays') }" /><span class="unit">天</span></div>
@@ -394,11 +394,12 @@ function cancel() { router.back() }
 @media (max-width: 960px) {
   .layout { grid-template-columns: 1fr; }
   .side .sticky { position: static; }
-  .save { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; flex-direction: row; align-items: center; padding: 12px var(--gutter) calc(12px + env(safe-area-inset-bottom)); background: #ecebe6f2; backdrop-filter: blur(12px); border-top: 1px solid var(--rule); }
+  .save { position: fixed; left: var(--rail); right: 0; bottom: 0; z-index: 60; flex-direction: row; align-items: center; padding: 12px var(--gutter) calc(12px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--rule); }
   .save .small { display: none; }
   .save .ghost { width: auto; }
-  .sections { padding-bottom: 40px; }
+  .sections { padding-bottom: 100px; }
   .ori { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 600px) { .grid2, .grid3, .toggles, .cards2 { grid-template-columns: 1fr; } }
+@media (max-width: 680px) { .save { left: 0; bottom: calc(68px + env(safe-area-inset-bottom)); padding-bottom: 12px; } }
 </style>

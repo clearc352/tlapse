@@ -1,94 +1,61 @@
 <script setup>
 import { ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter,useRoute } from 'vue-router'
 import { api } from '../lib/api.js'
 import { session } from '../lib/store.js'
-
-const router = useRouter()
-const route = useRoute()
-const token = ref('')
-const show = ref(false)
-const err = ref('')
-const errKind = ref('')
-const loading = ref(false)
-
+import Logo from '../components/Logo.vue'
+import Icon from '../components/Icon.vue'
+const router = useRouter(), route = useRoute()
+const token = ref(''), show = ref(false), err = ref(''), errKind = ref(''), loading = ref(false)
 async function submit() {
   if (!token.value || loading.value) return
   loading.value = true; err.value = ''; errKind.value = ''
   try {
     await api.login(token.value)
-    token.value = ''
-    session.loggedIn = true
-    const next = typeof route.query.next === 'string' && route.query.next.startsWith('/') && !route.query.next.startsWith('/login') ? route.query.next : '/'
+    token.value = ''; session.loggedIn = true
+    const target = route.query.next
+    const next = typeof target === 'string' && target.startsWith('/') && !target.startsWith('//') && !target.startsWith('/login') ? target : '/'
     router.replace(next)
   } catch (e) {
     errKind.value = e.kind
-    if (e.kind === 'auth') err.value = '口令不对。连续 8 次错误会锁定 5 分钟。'
-    else if (e.kind === 'rate') err.value = '尝试次数过多，这个地址被锁定 5 分钟，请稍后再试。'
-    else if (e.kind === 'network' || e.kind === 'timeout') err.value = '连不上手机。确认电脑和 iPhone 在同一个 Wi-Fi，守护进程 tlapsed 正在运行。'
+    if (e.kind === 'auth') err.value = '口令不对，连续 8 次错误会锁定 5 分钟'
+    else if (e.kind === 'rate') err.value = '尝试过多，请 5 分钟后再试'
+    else if (e.kind === 'network' || e.kind === 'timeout') err.value = '连不上手机，请检查 Wi-Fi 与 tlapsed'
     else err.value = e.message
   } finally { loading.value = false }
 }
 </script>
-
 <template>
   <div class="login">
-    <section class="hero">
-      <div class="brand">
-        <span class="mark"><i></i><i></i><i></i></span>
-        <span class="display">tlapse</span>
-      </div>
-      <h1 class="display h-xl">让时间<br /><em>慢慢</em>显影。</h1>
-      <p class="lead">一部 iPhone 6，一条串行快门队列，日复一日把同一个画面存下来。这里是它的控制台和照片库。</p>
-      <div class="film" aria-hidden="true">
-        <span v-for="i in 9" :key="i" :style="{ '--i': i }"></span>
-      </div>
-    </section>
-
-    <section class="card panel">
-      <span class="eyebrow">控制台登录</span>
-      <h2 class="display h-md">输入口令</h2>
-      <p class="muted small">口令是手机上 <span class="mono">config.json</span> 里的 <span class="mono">server.token</span>。浏览器不会记住它，登录状态保存在 12 小时有效的会话 Cookie 里。</p>
-      <form @submit.prevent="submit" class="stack gap-12">
-        <div class="field">
-          <label for="tk">口令</label>
-          <div class="pw">
-            <input id="tk" class="input" :class="{ bad: errKind === 'auth' }" :type="show ? 'text' : 'password'" v-model="token" autocomplete="current-password" autofocus spellcheck="false" />
-            <button type="button" class="btn sm ghost eye" @click="show = !show">{{ show ? '隐藏' : '显示' }}</button>
-          </div>
-          <p v-if="err" class="err" :class="{ net: errKind === 'network' || errKind === 'timeout' }">{{ err }}</p>
+    <section class="login-content">
+      <div class="wordmark"><Logo :size="44" /><h1 class="display">tlapse</h1></div>
+      <p class="tagline">让时间，慢慢显影。</p>
+      <form @submit.prevent="submit">
+        <div class="password-line">
+          <Icon name="lock" :size="17" /><label class="sr-only" for="tk">口令</label>
+          <input id="tk" :type="show ? 'text' : 'password'" v-model="token" placeholder="输入口令" autocomplete="current-password" autofocus spellcheck="false" :aria-invalid="!!err" :aria-describedby="err ? 'login-error' : undefined" />
+          <button type="button" class="btn ghost icon" @click="show = !show" :aria-label="show ? '隐藏口令' : '显示口令'" :aria-pressed="show"><Icon name="eye" :size="17" /></button>
+          <button class="btn solid icon enter" :disabled="!token || loading" aria-label="进入控制台" title="进入"><span v-if="loading" class="spinner"></span><Icon v-else name="arrowRight" :size="20" /></button>
         </div>
-        <button class="btn lg foil" :disabled="!token || loading">
-          <span v-if="loading" class="spinner"></span>{{ loading ? '正在连接手机…' : '进入控制台' }}
-        </button>
+        <p v-if="err" id="login-error" class="error" role="alert">{{ err }}</p>
       </form>
-      <div class="note">
-        <span class="eyebrow">注意</span>
-        <p>连接没有加密（只有 HTTP）。只在自己的 Wi-Fi、个人热点或 Tailscale 里打开，不要把端口转发到公网。</p>
-      </div>
+      <p class="phone"><Icon name="phone" :size="14" />iPhone 6 <span>·</span> 局域网连接</p>
+      <details class="help"><summary>连接帮助</summary><p>口令为 config.json 中的 server.token。仅在可信 Wi-Fi、热点或受控 VPN 内使用，连接未加密，不要转发端口到公网。</p></details>
     </section>
+    <a class="license" href="./MiSans-License.pdf" target="_blank" rel="noopener">MiSans</a>
   </div>
 </template>
-
 <style scoped>
-.login { min-height: 100dvh; display: grid; grid-template-columns: 1.15fr 1fr; gap: clamp(32px, 6vw, 96px); align-items: center; max-width: 1180px; margin: 0 auto; padding: clamp(32px, 6vw, 80px) var(--gutter); }
-.brand { display: flex; align-items: center; gap: 10px; margin-bottom: clamp(40px, 8vh, 96px); }
-.brand .display { font-size: 28px; }
-.mark { display: grid; grid-template-columns: 6px 6px; grid-template-rows: 6px 6px 6px; gap: 2px; }
-.mark i { width: 6px; height: 6px; border-radius: 1.6px; background: var(--accent); }
-.mark i:nth-child(1) { grid-area: 1 / 1; } .mark i:nth-child(2) { grid-area: 2 / 2; background: var(--blue); } .mark i:nth-child(3) { grid-area: 3 / 1; background: #e8b84a; }
-.hero h1 { margin-bottom: 24px; }
-.lead { font-size: 17px; line-height: 1.75; color: var(--fg-body); max-width: 30em; }
-.film { display: flex; gap: 6px; margin-top: 48px; }
-.film span { width: 44px; height: 58px; border-radius: 6px; border: 1px solid var(--border); background: linear-gradient(180deg, hsl(calc(205 - var(--i) * 18) 70% calc(92% - var(--i) * 3%)), hsl(calc(40 + var(--i) * 12) 85% calc(86% - var(--i) * 2%))); box-shadow: 0 6px 16px -10px #15151566; opacity: 0; animation: frame .7s var(--ease-out) forwards; animation-delay: calc(var(--i) * 90ms); }
-@keyframes frame { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; } }
-.card { padding: clamp(24px, 3vw, 40px); display: flex; flex-direction: column; gap: 18px; background: var(--surface); }
-.small { font-size: 13.5px; line-height: 1.7; }
-.pw { position: relative; }
-.pw .input { height: 48px; padding-right: 72px; font-size: 16px; letter-spacing: .04em; }
-.eye { position: absolute; right: 6px; top: 8px; }
-.err { color: var(--danger); font-size: 13px; }
-.err.net { color: var(--warn); }
-.note { padding-top: 16px; border-top: 1px solid var(--rule); display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--fg-muted); }
-@media (max-width: 860px) { .login { grid-template-columns: 1fr; } .brand { margin-bottom: 32px; } .film { display: none; } }
+.login { min-height: 100dvh; display: grid; place-items: center; padding: 40px 24px; position: relative; }
+.login-content { width: min(100%,390px); transform: translateY(-24px); }
+.wordmark { display: flex; gap: 14px; align-items: center; justify-content: center; color: var(--fg); } .wordmark h1 { font-size: 60px; letter-spacing: -.06em; }
+.tagline { font-size: 15px; color: var(--fg-muted); letter-spacing: .12em; text-align: center; margin-top: 20px; }
+form { margin-top: 54px; } .password-line { display: flex; align-items: center; padding: 7px 7px 7px 18px; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; color: var(--fg-muted); }
+.password-line:focus-within { border-color: var(--border-strong); }
+input { background: none; border: none; width: 100%; min-width: 0; padding: 5px 0 5px 3px; font-size: 14px; height: 42px; color: var(--fg); } input:focus { outline: none; } input::placeholder { color: var(--fg-faint); }
+.enter { background: var(--lime) !important; color: var(--fg) !important; border-color: var(--lime) !important; width: 46px !important; }
+.error { color: var(--danger); font-size: 12px; padding: 12px 18px 0; }
+.phone { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 32px; font-size: 10px; color: var(--fg-muted); } .phone span { margin: 0 3px; }
+.help { font-size: 10px; color: var(--fg-muted); text-align: center; margin-top: 18px; } .help summary { cursor: pointer; } .help p { text-align: left; margin-top: 14px; line-height: 1.9; } .license { position: absolute; bottom: 24px; font-size: 9px; color: var(--fg-muted); }
+@media (max-width: 680px) { input { font-size: 16px; } .wordmark h1 { font-size: 52px; } }
 </style>

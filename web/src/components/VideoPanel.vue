@@ -5,6 +5,7 @@ import { toast, toastError } from '../lib/store.js'
 import { device } from '../lib/device.js'
 import { dateLong, videoMeta } from '../lib/format.js'
 import Icon from './Icon.vue'
+import VideoPlayer from './VideoPlayer.vue'
 
 const props = defineProps({ project: Object, refreshKey: Number })
 const emit = defineEmits(['encoded', 'count'])
@@ -92,7 +93,7 @@ async function upload(name) {
     <div v-else class="list">
       <article v-for="v in videos" :key="v.name" class="vid" :class="{ on: playing === v.name }">
         <div class="player" v-if="playing === v.name">
-          <video :src="media.video(project.id, v.name)" controls preload="metadata" playsinline></video>
+          <VideoPlayer :src="media.video(project.id, v.name)" :name="v.name" />
         </div>
         <div class="row-v">
           <button class="name" @click="playing = playing === v.name ? '' : v.name">
@@ -118,7 +119,7 @@ async function upload(name) {
 .txt { font-size: 14px; margin-top: 6px; color: var(--fg-body); }
 .txt.warn { color: var(--fg-muted); font-size: 13px; margin-top: 4px; }
 .progress { height: 2px; margin-top: -1px; overflow: hidden; border-radius: 2px; }
-.progress i { display: block; height: 100%; width: 30%; background: linear-gradient(90deg in oklch, transparent, #b76dd7, #3b6ff6, #ffda92, transparent); animation: slide 1.6s var(--ease-out) infinite; }
+.progress i { display: block; height: 100%; width: 30%; background: var(--accent); animation: slide 1.6s var(--ease-out) infinite; }
 @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(400%); } }
 .list { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
 .vid { border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; background: var(--surface); transition: border-color var(--dur-2), box-shadow var(--dur-3); }

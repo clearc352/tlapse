@@ -1,6 +1,13 @@
 <script setup>
 defineProps({ name: String, size: { type: [Number, String], default: 16 } })
 const P = {
+  layers: 'M12 3 2 8l10 5 10-5zM2 12l10 5 10-5M2 16l10 5 10-5',
+  phone: 'M7 3h10v18H7zM11 18h2',
+  search: 'M20 20l-5-5M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14z',
+  filter: 'M4 6h16M7 12h10M10 18h4',
+  lock: 'M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5zM12 14v3',
+  eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  arrowRight: 'M5 12h14M13 6l6 6-6 6',
   camera: 'M4 8.5A2.5 2.5 0 0 1 6.5 6h1.3l1.2-1.8A1.5 1.5 0 0 1 10.2 3.5h3.6a1.5 1.5 0 0 1 1.2.7L16.2 6h1.3A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5zM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z',
   pause: 'M8 5v14M16 5v14',
   play: 'M7 4.5v15l12-7.5z',
