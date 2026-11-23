@@ -1787,7 +1787,8 @@ static BOOL TLWriteAll(int fd, const void *bytes, size_t length) {
 - (TLWebResponse *)staticResponse:(NSString *)path {
     NSDictionary *types = @{@"html": @"text/html; charset=utf-8", @"js": @"text/javascript; charset=utf-8",
                            @"css": @"text/css; charset=utf-8", @"svg": @"image/svg+xml",
-                           @"woff": @"font/woff", @"woff2": @"font/woff2"};
+                           @"woff": @"font/woff", @"woff2": @"font/woff2",
+                           @"pdf": @"application/pdf", @"txt": @"text/plain; charset=utf-8"};
     NSString *relative = [path isEqualToString:@"/"] ? @"index.html" : [path substringFromIndex:1];
     // override 只决定测试资源根：首页及 assets 始终来自同一个目录。
     if ([relative isEqualToString:@"index.html"] && self.indexFileOverride.length > 0) {

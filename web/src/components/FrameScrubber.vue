@@ -52,12 +52,12 @@ function onDrag(_: unknown, info: PanInfo) {
 .stage-drag :deep(.safe) { background: transparent; }
 .expand { position: absolute; right: 16px; top: 16px; background: #fafaf7e8; border: 0; }
 .stage-time { position: absolute; left: 18px; bottom: 15px; padding: 3px 8px; background: #fafaf7e8; border-radius: 5px; color: var(--fg); font-size: 10px; pointer-events: none; }
-.contact-sheet { display: grid; grid-auto-columns: minmax(0,1fr); grid-auto-flow: column; gap: 6px; margin: 22px auto 0; max-width: 920px; }
-.sample { display: block; height: 68px; border: 0; border-radius: 4px; padding: 0; overflow: hidden; background: var(--wash); cursor: pointer; opacity: .68; transition: opacity .18s; }
+.contact-sheet { display: flex; justify-content: center; gap: 6px; margin: 22px auto 0; max-width: 920px; }
+.sample { display: block; flex: 0 1 96px; min-width: 0; height: 68px; border: 0; border-radius: 4px; padding: 0; overflow: hidden; background: var(--wash); cursor: pointer; opacity: .68; transition: opacity .18s; }
 .sample:hover,.sample.on { opacity: 1; } .sample.on { outline: 2px solid var(--fg); outline-offset: 3px; }
 .timeline { display: flex; align-items: center; gap: 16px; max-width: 920px; margin: 6px auto 0; }
 .timeline span { font-size: 10px; color: var(--fg-muted); flex-shrink: 0; }
 .frame-range { min-width: 0; flex: 1; accent-color: var(--fg); height: 44px; cursor: ew-resize; }
 .position { text-align: center; color: var(--fg); font-size: 11px; } .position span { color: var(--fg-muted); margin-left: 8px; }
-@media (max-width: 680px) { .stage { height: min(51vh,440px); min-height: 260px; } .contact-sheet { gap: 4px; margin-top: 18px; } .sample { height: 48px; } .timeline { gap: 10px; } .timeline span { font-size: 9px; } }
+@media (max-width: 680px) { .stage { height: min(51vh,440px); min-height: 260px; } .contact-sheet { gap: 4px; margin-top: 18px; } .sample { flex-basis: 64px; height: 48px; } .timeline { gap: 10px; } .timeline span { font-size: 9px; } }
 </style>
