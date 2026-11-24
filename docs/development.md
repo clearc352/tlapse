@@ -45,6 +45,9 @@ make -C camfix package FINALPACKAGE=1
 顺序不能省略：网页产物不提交 Git，必须先构建，再打包主程序。
 产物分别在 `packages/` 和 `camfix/packages/`，仅本地生成，不自动安装到手机。
 若源码来自 ZIP，打包器仍可能需要本机 Git 工具，但不需要已有 GitHub 远端。
+仅安装 Command Line Tools 时，可以将 `iPhoneOS12.4.sdk` 放在 `$THEOS/sdks/`，
+执行 `make package TARGET=iphone:clang:12.4:12.0 MODULESFLAGS=-fno-modules FINALPACKAGE=1`。
+禁用 Clang 模块可避免较新编译器拒绝 SDK 中旧格式的 module map。
 
 `camfix/` 的一个 deb 同时包含从源码构建的 `TlapseCameraFix.dylib` 和 `tlapse-camera-inject`。
 动态库安装到 `/usr/lib/`，注入器安装到 `/usr/local/bin/`，只为 `tlapsed` 的后台摄像头使用提供例外。

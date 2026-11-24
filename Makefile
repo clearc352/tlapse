@@ -7,7 +7,7 @@ INSTALL_TARGET_PROCESSES :=
 HOST_SDK := $(shell xcrun --sdk macosx --show-sdk-path)
 # 主机验证可用 HOST_TEST_CFLAGS=-O2 复核生产优化下的资源生命周期。
 HOST_TEST_CFLAGS ?=
-HOST_SRCS := src/TLVersion.m src/TLRules.m src/TLSupport.m src/TLLog.m src/TLConfig.m src/TLState.m src/TLImage.m src/TLEncode.m src/TLEncoder.m src/TLUploader.m src/TLJobs.m src/TLScheduler.m src/TLWeb.m tests/test_host.m
+HOST_SRCS := src/TLVersion.m src/TLRules.m src/TLSupport.m src/TLLog.m src/TLConfig.m src/TLState.m src/TLImage.m src/TLEncode.m src/TLEncoder.m src/TLUploader.m src/TLJobs.m src/TLScheduler.m src/TLWeb.m app/TLClient.m tests/test_host.m
 
 ifeq ($(filter test test-web-fixture,$(MAKECMDGOALS)),)
 
@@ -26,7 +26,14 @@ tlapsed_CFLAGS := -fobjc-arc -Isrc -Wall
 tlapsed_CODESIGN_FLAGS := -Sentitlements.plist
 tlapsed_INSTALL_PATH := /usr/local/bin
 
+APPLICATION_NAME := Tlapse
+Tlapse_FILES := app/main.m app/TLClient.m
+Tlapse_FRAMEWORKS := Foundation UIKit AVFoundation AVKit CoreGraphics ImageIO
+Tlapse_CFLAGS := -fobjc-arc -Wall -Werror=unguarded-availability-new
+Tlapse_RESOURCE_DIRS := app/Resources
+
 include $(THEOS_MAKE_PATH)/tool.mk
+include $(THEOS_MAKE_PATH)/application.mk
 
 else
 

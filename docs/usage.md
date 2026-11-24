@@ -7,7 +7,7 @@
 
 先按[开发说明](development.md)从源码生成两个 deb：
 
-- `packages/` 中的 `com.ddxyl.tlapse`：守护进程及网页。
+- `packages/` 中的 `com.ddxyl.tlapse`：守护进程、网页和主屏幕 App「帧轨」。
 - `camfix/packages/` 中的 `com.ddxyl.tlapse-camera`：后台摄像头支持，包含动态库和注入器。
 
 备份手机已有的 `/var/mobile/Timelapse/`，将选定的两个 deb 拷到手机，在手机 root shell 中依次安装：
@@ -34,6 +34,12 @@ dpkg -i /tmp/tlapse-camera.deb
 
 `server.token` 至少 16 字符，不能使用 `change-me`。设备不需要 Node.js。
 项目目录和照片不会出现在系统「照片」中。
+
+在 iPhone 上打开主屏幕的「帧轨」，用 `127.0.0.1:8080`（或实际配置的端口）和同一个口令登录。
+如果 App 图标没有出现，在手机的 root shell 执行 `uicache -p /Applications/Tlapse.app`（旧版 `uicache` 不支持 `-p` 时，直接执行 `uicache`）。
+App 可新建项目、暂停或继续拍摄、手动拍照，调整名称、间隔、分辨率和快门声，
+也可查看最新照片、按日浏览照片、左滑删除单张照片，以及合成和播放视频。
+其他高级配置仍可在网页上编辑。
 
 ## 拍摄与配置
 

@@ -10,6 +10,7 @@
 #import "TLUploader.h"
 #import "TLVersion.h"
 #import "TLWeb.h"
+#import "../app/TLClient.h"
 
 #import <AVFoundation/AVFoundation.h>
 #import <CoreGraphics/CoreGraphics.h>
@@ -399,6 +400,53 @@ static NSString *TLSessionCookie(NSString *response) {
     return [rest substringToIndex:end.location];
 }
 
+static NSDictionary *TLClientCall(TLClient *client, NSString *method, NSString *path, NSDictionary *body, NSError **error) {
+    __block BOOL done = NO;
+    __block NSDictionary *result = nil;
+    __block NSError *failure = nil;
+    [client request:method path:path body:body timeout:2 reply:^(NSDictionary *payload, NSError *requestError) {
+        result = payload;
+        failure = requestError;
+        done = YES;
+    }];
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5];
+    while (!done && deadline.timeIntervalSinceNow > 0) {
+        [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+    }
+    EXPECT(done, "native client invokes completion on main queue");
+    *error = failure;
+    return result;
+}
+
+static void TLTestNativeClient(uint16_t port) {
+    NSURL *defaultURL = [TLClient serverURLForAddress:@" 127.0.0.1 "];
+    EXPECT([defaultURL.absoluteString isEqualToString:@"http://127.0.0.1:8080"], "native default port");
+    EXPECT([TLClient serverURLForAddress:@"http://user@localhost"] == nil, "native rejects URL credentials");
+    EXPECT([TLClient serverURLForAddress:@"http://localhost/api?token=ignored"] == nil, "native requires server origin");
+    EXPECT([TLPathSegment(@"a/b?x=#") isEqualToString:@"a%2Fb%3Fx%3D%23"], "native escapes path segments");
+    NSURL *url = [TLClient serverURLForAddress:[NSString stringWithFormat:@"127.0.0.1:%u", port]];
+    TLClient *client = [[TLClient alloc] initWithServer:url];
+    NSError *error = nil;
+    TLClientCall(client, @"GET", @"/api/projects", nil, &error);
+    EXPECT([error.domain isEqualToString:TLHTTPErrorDomain] && error.code == 401, "native detects unauthenticated response");
+    NSDictionary *login = TLClientCall(client, @"POST", @"/api/login", @{@"token": @"correct-horse-battery"}, &error);
+    EXPECT(!error && [login[@"ok"] boolValue], "native logs in with JSON and request header");
+    NSURL *mediaURL = [client URLForPath:@"/api/projects/plant/media/videos/example.mp4"];
+    EXPECT([[client cookiesForURL:mediaURL].firstObject.name isEqualToString:@"tlapse_session"], "native exposes applicable session to AVKit");
+    TLClient *otherClient = [[TLClient alloc] initWithServer:url];
+    EXPECT(![otherClient cookiesForURL:url].count, "native does not share session between logins");
+    [otherClient invalidate];
+    NSDictionary *projects = TLClientCall(client, @"GET", @"/api/projects", nil, &error);
+    EXPECT(!error && [projects[@"projects"][0][@"id"] isEqualToString:@"plant"], "native lists projects with session cookie");
+    NSDictionary *update = TLClientCall(client, @"POST", @"/api/projects/plant/pause", nil, &error);
+    EXPECT(!error && [update[@"enabled"] isEqual:@NO], "native sends header and cookie on bodyless commands");
+    NSDictionary *logout = TLClientCall(client, @"POST", @"/api/logout", nil, &error);
+    EXPECT(!error && [logout[@"ok"] boolValue], "native logs out");
+    TLClientCall(client, @"GET", @"/api/projects", nil, &error);
+    EXPECT([error.domain isEqualToString:TLHTTPErrorDomain] && error.code == 401, "native session ends on logout");
+    [client invalidate];
+}
+
 static void TLTestWeb(void) {
     struct sockaddr_in lan = TLIPv4("192.168.1.20");
     struct sockaddr_in publicAddress = TLIPv4("8.8.8.8");
@@ -460,6 +508,7 @@ static void TLTestWeb(void) {
         EXPECT([listener hasPrefix:@"127.0.0.1:"] || [listener hasPrefix:@"[::1]:"], "only loopback");
     }
     uint16_t port = server.port;
+    TLTestNativeClient(port);
     NSString *index = TLWebCall(port, @"GET", @"/", nil, nil, NO);
     EXPECT([index containsString:@" 200 "] && [index containsString:@"console-ok"], "index");
     NSString *evil = TLRawHTTP(port, [NSString stringWithFormat:@"GET /api/status HTTP/1.1\r\nHost: evil.example:%u\r\nConnection: close\r\n\r\n", port]);
