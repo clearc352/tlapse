@@ -108,6 +108,20 @@
     });
 }
 
+- (BOOL)withPausedProject:(NSString *)projectID perform:(dispatch_block_t)block {
+    __block BOOL allowed = NO;
+    dispatch_sync(_queue, ^{
+        if ([self projectWithID:projectID].enabled ||
+            [self->_inflight containsObject:projectID] ||
+            [self->_encodeInflight containsObject:projectID]) {
+            return;
+        }
+        allowed = YES;
+        block();
+    });
+    return allowed;
+}
+
 - (TLProject *)projectWithID:(NSString *)projectID {
     return [_config projectWithID:projectID];
 }

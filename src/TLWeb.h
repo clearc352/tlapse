@@ -6,6 +6,7 @@
 @class TLConfig;
 @class TLEncoder;
 @class TLProject;
+@class TLScheduler;
 @class TLState;
 @class TLUploader;
 
@@ -28,6 +29,7 @@ typedef TLCaptureResult *_Nullable (^TLWebSnap)(TLProject *project);
 @property (nonatomic, readonly, copy) NSArray<NSString *> *listenAddresses;
 @property (nonatomic, copy, nullable) NSString *indexFileOverride;
 @property (nonatomic, strong, nullable) TLEncoder *encoder;
+@property (nonatomic, weak, nullable) TLScheduler *scheduler;
 @property (nonatomic, strong, nullable) TLUploader *uploader;
 @end
 

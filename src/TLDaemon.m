@@ -156,6 +156,7 @@ static int TLRaiseDaemonMemoryLimit(void) {
         return result;
     }];
     _web.encoder = _encoder;
+    _web.scheduler = _scheduler;
     _web.uploader = _uploader;
 
     if (initial) {

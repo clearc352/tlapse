@@ -29,6 +29,7 @@ BOOL TLEnsureDirectory(NSString *path, NSError **error);
 BOOL TLWriteDataAtomic(NSData *data, NSString *path, NSError **error);
 NSString *TLUniqueFilePath(NSString *path);
 double TLFreeGigabytes(NSString *path);
+int TLTryLockProjectMedia(NSString *root, BOOL exclusive);
 
 /// When running as root, create storageRoot and switch to the mobile user.
 /// Launchd starts the daemon as root so it can raise its jetsam limit first.
