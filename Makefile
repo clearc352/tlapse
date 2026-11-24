@@ -29,14 +29,11 @@ tlapsed_INSTALL_PATH := /usr/local/bin
 APPLICATION_NAME := Tlapse
 Tlapse_FILES := app/main.m app/TLClient.m
 Tlapse_FRAMEWORKS := Foundation UIKit AVFoundation AVKit CoreGraphics ImageIO
-Tlapse_CFLAGS := -fobjc-arc -Wall -Werror=unguarded-availability
+Tlapse_CFLAGS := -fobjc-arc -Wall -Werror=unguarded-availability-new
 Tlapse_RESOURCE_DIRS := app/Resources
 
 include $(THEOS_MAKE_PATH)/tool.mk
 include $(THEOS_MAKE_PATH)/application.mk
-
-after-stage::
-	xcrun --sdk iphoneos ibtool --minimum-deployment-target 12.0 --target-device iphone --compile "$(THEOS_STAGING_DIR)/Applications/Tlapse.app/LaunchScreen.storyboardc" app/LaunchScreen.storyboard
 
 else
 

@@ -36,11 +36,7 @@ static UITableViewCell *TLCell(UITableView *table, NSString *title, NSString *su
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    if (@available(iOS 13.0, *)) {
-        self.view.backgroundColor = UIColor.systemBackgroundColor;
-    } else {
-        self.view.backgroundColor = UIColor.whiteColor;
-    }
+    self.view.backgroundColor = UIColor.whiteColor;
     UIImageView *imageView = [[UIImageView alloc] init];
     imageView.backgroundColor = UIColor.blackColor;
     imageView.contentMode = UIViewContentModeScaleAspectFit;
