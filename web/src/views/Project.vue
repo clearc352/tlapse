@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, media } from '../lib/api.js'
 import { toastError } from '../lib/store.js'
 import { device, refreshDevice } from '../lib/device.js'
-import { snap, togglePause, setShutter, removeProject, isBusy, shutterOn } from '../lib/actions.js'
+import { snap, togglePause, setShutter, removeProject, clearProjectContent, isBusy, shutterOn } from '../lib/actions.js'
 import { interval, num, encodeEvery } from '../lib/format.js'
 import PhotoLibrary from '../components/PhotoLibrary.vue'
 import VideoPanel from '../components/VideoPanel.vue'
@@ -39,6 +39,7 @@ onMounted(() => { load(); refreshDevice().catch(() => {}) })
 watch(() => props.id, () => { p.value = null; missing.value = false; counts.value = { days: null, videos: null }; load() })
 
 const snapping = computed(() => p.value && isBusy(p.value.id, 'snap'))
+const clearing = computed(() => isBusy(props.id, 'clearContent'))
 const canCapture = computed(() => device.data?.features?.capture !== false)
 async function doSnap() {
   const project = p.value
@@ -51,6 +52,15 @@ async function doSnap() {
   }
 }
 async function doRemove() { if (await removeProject(p.value)) router.replace('/') }
+async function doClearContent() {
+  const id = props.id
+  if (!await clearProjectContent(p.value) || id !== props.id) return
+  photoKey.value++
+  videoKey.value++
+  counts.value = { days: null, videos: null }
+  load()
+  refreshDevice(true).catch(() => {})
+}
 function onPhotosChanged() { bust.value = Date.now() }
 function onEncoded() { photoKey.value++; load() }
 
@@ -88,9 +98,9 @@ const facts = computed(() => {
           <p v-if="p" class="summary"><span class="dot" :class="{ paused: !p.enabled }"></span>{{ p.enabled ? '拍摄中' : '已暂停' }}<span>·</span>{{ interval(p.capture?.interval) }}<span>·</span>{{ num(p.state?.frameCount ?? 0) }} 张</p>
         </div>
         <div class="head-actions" v-if="p">
-          <button class="btn ghost icon" :disabled="isBusy(id,'pause')" @click="togglePause(p)" :title="p.enabled ? '暂停拍摄' : '继续拍摄'" :aria-label="p.enabled ? '暂停拍摄' : '继续拍摄'"><Icon :name="p.enabled ? 'pause' : 'play'" :size="19" /></button>
+          <button class="btn ghost icon" :disabled="isBusy(id,'pause') || clearing" @click="togglePause(p)" :title="p.enabled ? '暂停拍摄' : '继续拍摄'" :aria-label="p.enabled ? '暂停拍摄' : '继续拍摄'"><Icon :name="p.enabled ? 'pause' : 'play'" :size="19" /></button>
           <router-link :to="{name:'edit',params:{id}}" class="btn ghost icon" title="编辑参数" aria-label="编辑参数"><Icon name="sliders" :size="19" /></router-link>
-          <button class="btn solid icon capture" :disabled="snapping || !canCapture" @click="doSnap" :title="canCapture ? '拍一张' : '当前进程没有拍照能力'" aria-label="拍一张"><span v-if="snapping" class="spinner"></span><Icon v-else name="camera" :size="20" /></button>
+          <button class="btn solid icon capture" :disabled="snapping || clearing || !canCapture" @click="doSnap" :title="canCapture ? '拍一张' : '当前进程没有拍照能力'" aria-label="拍一张"><span v-if="snapping" class="spinner"></span><Icon v-else name="camera" :size="20" /></button>
         </div>
       </header>
       <div class="media-bar">
@@ -112,7 +122,11 @@ const facts = computed(() => {
           <div class="shutter"><span><Icon :name="shutterOn(p) ? 'bell' : 'bellOff'" /> 快门声</span><button class="switch" role="switch" :aria-checked="shutterOn(p)" :disabled="isBusy(id,'shutter')" @click="setShutter(p,!shutterOn(p))" aria-label="快门声"></button></div>
           <p v-if="!shutterOn(p)" class="hint">不支持静音时会报错，不会回退有声</p>
           <dl class="facts"><div v-for="[k,v] in facts" :key="k"><dt>{{ k }}</dt><dd>{{ v }}</dd></div></dl>
-          <div class="row gap-8"><router-link :to="{name:'edit',params:{id}}" class="btn"><Icon name="sliders" />编辑</router-link><span class="grow"></span><button class="btn ghost danger" @click="doRemove"><Icon name="trash" />删除项目</button></div>
+          <div class="row gap-8"><router-link :to="{name:'edit',params:{id}}" class="btn"><Icon name="sliders" />编辑</router-link><span class="grow"></span><button class="btn ghost danger" :disabled="clearing" @click="doRemove"><Icon name="trash" />删除项目</button></div>
+          <div class="content-actions row gap-8">
+            <button class="btn ghost danger" :disabled="p.enabled || clearing || snapping || isBusy(id,'pause')" @click="doClearContent"><span v-if="clearing" class="spinner"></span><Icon v-else name="trash" />删除保存内容</button>
+            <span v-if="p.enabled">请先暂停拍摄</span>
+          </div>
         </div>
       </details>
     </template>
@@ -128,5 +142,6 @@ const facts = computed(() => {
 .parameters { margin-top: 24px; border-top: 1px solid var(--rule); padding-top: 20px; font-size: 12px; color: var(--fg-muted); } .parameters summary { display: flex; align-items: center; gap: 8px; cursor: pointer; width: max-content; min-height: 44px; } .parameter-body { max-width: 680px; margin-top: 12px; }
 .shutter { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; } .shutter>span { display: flex; align-items: center; gap: 8px; color: var(--fg); }
 .facts { margin: 16px 0 24px; } .facts div { display: flex; gap: 20px; border-top: 1px solid var(--rule); padding: 12px 0; } dt { flex-shrink: 0; } dd { margin: 0 0 0 auto; color: var(--fg); text-align: right; overflow-wrap: anywhere; }
+.content-actions { margin-top: 8px; flex-wrap: wrap; }
 @media (max-width: 680px) { .page { padding-top: 24px; } .head { gap: 4px; flex-wrap: wrap; margin-bottom: 18px; } .head h1 { font-size: 25px; } .project-title { min-width: 150px; } .head-actions { gap: 0; margin-left: auto; } .capture { margin-left: 4px; } .back { margin-left: -10px; } .summary { font-size: 9px; } }
 </style>

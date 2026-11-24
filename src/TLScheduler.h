@@ -18,6 +18,7 @@ typedef TLCaptureResult * _Nonnull (^TLScheduledCapture)(TLProject *project, voi
                       encoder:(TLEncoder *_Nullable)encoder
                      uploader:(TLUploader *_Nullable)uploader;
 - (void)applyConfig:(TLConfig *)config;
+- (BOOL)withPausedProject:(NSString *)projectID perform:(dispatch_block_t)block;
 - (void)stop;
 @end
 

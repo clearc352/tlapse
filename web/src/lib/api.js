@@ -71,6 +71,7 @@ export const api = {
   createProject: (body) => request('POST', '/api/projects', body).then((r) => r.data),
   updateProject: (id, body) => request('PUT', P(id), body).then((r) => r.data),
   deleteProject: (id) => request('DELETE', P(id)).then((r) => r.data),
+  deleteProjectContent: (id) => request('DELETE', `${P(id)}/content`, undefined, { timeout: 0 }).then((r) => r.data),
   pause: (id) => request('POST', `${P(id)}/pause`).then((r) => r.data),
   resume: (id) => request('POST', `${P(id)}/resume`).then((r) => r.data),
   // 409 / 500 也带 outcome，一并交给调用方

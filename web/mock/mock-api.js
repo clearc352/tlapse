@@ -81,6 +81,13 @@ function send(res, code, obj, headers = {}) {
   res.end(JSON.stringify(obj))
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+let mediaJobs = 0
+async function withMediaJob(job) {
+  mediaJobs++
+  try { return await job() }
+  finally { mediaJobs-- }
+}
+
 async function body(req) {
   let s = ''
   for await (const c of req) s += c
@@ -152,18 +159,28 @@ export function mockApi() {
 
         if (rest === '' && m === 'PUT') { const b = await body(req); merge(proj, b); log('info', `更新项目 ${id}：${Object.keys(b).join(', ')}`); return send(res, 200, proj) }
         if (rest === '' && m === 'DELETE') { state.projects = state.projects.filter((x) => x.id !== id); return send(res, 200, { deleted: true, keptFiles: true }) }
+        if (rest === '/content' && m === 'DELETE') {
+          if (mediaJobs) return send(res, 409, { error: '正在拍照、合成或删除内容，请稍后重试' })
+          if (proj.enabled) return send(res, 409, { error: '请先暂停项目拍摄' })
+          if (state.projects.some((x) => x !== proj && x.id.toLowerCase() === id.toLowerCase())) return send(res, 409, { error: '另一个项目的 ID 仅大小写不同，无法安全删除' })
+          state.frames[id] = {}
+          state.videos[id] = []
+          Object.assign(proj.state, { frameCount: 0, lastFile: '', lastCaptureAt: '' })
+          return send(res, 200, { deleted: true })
+        }
         if (rest === '/pause') { proj.enabled = false; return send(res, 200, { ok: true }) }
         if (rest === '/resume') { proj.enabled = true; return send(res, 200, { ok: true }) }
-        if (rest === '/snap') {
+        if (rest === '/snap') return withMediaJob(async () => {
           log('info', `${id} 手动拍照：打开摄像头`)
           await sleep(2600)
           const d = new Date(); const key = ymd(d)
           const name = `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.jpg`
           ;(fr[key] ||= []).unshift({ name, label: `${name.slice(0, 2)}:${name.slice(2, 4)}:${name.slice(4, 6)}`, kind: 'thumbs', bytes: 686000 })
+          proj.state.frameCount++
           log('info', `${id} 已关闭摄像头`)
           log('info', `${id} 方向 portrait 尺寸=1440x1920，已保存照片 frames/${key}/${name}`)
           return send(res, 200, { outcome: 'saved', message: '已保存照片', relativePath: `projects/${id}/frames/${key}/${name}`, width: 1440, height: 1920 })
-        }
+        })
         if (rest === '/frames' && m === 'GET') {
           const date = url.searchParams.get('date')
           const dates = Object.keys(fr).filter((k) => fr[k].length).sort().reverse()
@@ -184,13 +201,14 @@ export function mockApi() {
         const mm = /^\/media\/(thumbs|frames)\/(\d{8})\/([^/]+)$/.exec(rest)
         if (mm) {
           const n = decodeURIComponent(mm[3])
+          if (!fr[mm[2]]?.some((frame) => frame.name === n)) return send(res, 404, { error: '没有这张照片' })
           if (url.searchParams.get('download')) res.setHeader('Content-Disposition', `attachment; filename="${n}"`)
           res.setHeader('Content-Type', 'image/svg+xml')
           if (mm[1] === 'frames') await sleep(500)
           return res.end(svg(mm[2] + n, `${mm[2]} ${n}`, mm[1] === 'frames' ? 1440 : 300, mm[1] === 'frames' ? 1920 : 400))
         }
         if (rest === '/videos') return send(res, 200, { videos: state.videos[id] || [], encodeEnabled: true })
-        if (rest === '/encode') {
+        if (rest === '/encode') return withMediaJob(async () => {
           const n = Object.values(fr).reduce((s, l) => s + l.length, 0)
           if (!n) return send(res, 409, { error: '没有照片可以合成' })
           await sleep(4000)
@@ -198,7 +216,7 @@ export function mockApi() {
           if (!state.videos[id].some((v) => v.name === name)) state.videos[id].push({ name })
           log('info', `${id} 已合成 ${name}，${n} 帧`)
           return send(res, 200, { ok: true, message: '已合成', relativePath: `projects/${id}/videos/${name}`, width: 1920, height: 1440, frames: n, removedFrames: 0 })
-        }
+        })
         if (rest.startsWith('/media/videos/')) return send(res, 404, { error: '演示数据里没有视频文件' })
         return send(res, 404, { error: '没有这个接口' })
       })

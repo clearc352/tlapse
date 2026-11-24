@@ -19,8 +19,8 @@ export async function snap(project) {
   setBusy(id, 'snap', true)
   try {
     const { data } = await api.snap(id)
-    const tone = SKIP_TONE[data.outcome] || 'info'
-    let msg = data.message || data.outcome || '完成'
+    const tone = SKIP_TONE[data.outcome] || (data.error ? 'warn' : 'info')
+    let msg = data.message || data.error || data.outcome || '完成'
     if (data.outcome === 'saved' && data.width) msg += ` · ${data.width}×${data.height}`
     toast(msg, tone, 5000)
     return data
@@ -74,6 +74,29 @@ export async function removeProject(project) {
     toast(r.keptFiles ? '项目已删除，文件仍保留在手机上' : '项目已删除', 'ok')
     return true
   } catch (e) { toastError(e); return false }
+}
+
+export async function clearProjectContent(project) {
+  const id = project.id
+  if (isBusy(id, 'clearContent')) return false
+  setBusy(id, 'clearContent', true)
+  try {
+    const ok = await confirmDialog({
+      title: `删除「${project.name || id}」的已保存内容？`,
+      body: '将永久删除此项目在手机上的所有照片、缩略图和视频。\n项目及其设置会保留，已上传的副本不会被删除。',
+      confirmText: '永久删除内容',
+      tone: 'danger',
+    })
+    if (!ok) return false
+    await api.deleteProjectContent(id)
+    toast('已删除保存内容，项目设置已保留', 'ok')
+    return true
+  } catch (e) {
+    toastError(e)
+    return false
+  } finally {
+    setBusy(id, 'clearContent', false)
+  }
 }
 
 export const shutterOn = (p) => p?.capture?.shutterSound !== false
