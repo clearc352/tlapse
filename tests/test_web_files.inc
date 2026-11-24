@@ -142,5 +142,38 @@ static void TLTestWebFiles(void) {
     close(fd); usleep(50000);
     EXPECT(received < video.length, "truncation closes incomplete body");
     EXPECT(TLDescriptorCount() == before, "truncated transfer releases descriptors");
+    NSString *content = @"/api/projects/plant/content";
+    NSString *cookie = TLSessionCookie(TLWebCall(port, @"POST", @"/api/login", @"{\"token\":\"correct-horse-battery\"}", nil, YES));
+    EXPECT([TLWebCall(port, @"DELETE", content, nil, cookie, NO) containsString:@" 403 "], "content deletion needs mutation header");
+    EXPECT([TLWebCall(port, @"DELETE", @"/api/projects/%2e%2e/content", nil, cookie, YES) containsString:@" 404 "], "content deletion rejects traversal");
+    NSString *projectDir = [root stringByAppendingPathComponent:@"projects/plant"];
+    NSString *detached = [root stringByAppendingPathComponent:@"detached"];
+    EXPECT([fm moveItemAtPath:projectDir toPath:detached error:nil], "move project outside projects directory");
+    EXPECT([fm createSymbolicLinkAtPath:projectDir withDestinationPath:detached error:nil], "symlink project outside projects directory");
+    EXPECT([TLWebCall(port, @"DELETE", content, nil, cookie, YES) containsString:@" 500 "], "content deletion refuses symlinked project directory");
+    EXPECT([fm fileExistsAtPath:[detached stringByAppendingPathComponent:@"videos/large.mp4"]], "symlinked project remains intact");
+    [fm removeItemAtPath:projectDir error:nil];
+    EXPECT([fm moveItemAtPath:detached toPath:projectDir error:nil], "restore project directory");
+    NSString *thumbs = [projectDir stringByAppendingPathComponent:@"thumbs"];
+    [fm createDirectoryAtPath:thumbs withIntermediateDirectories:YES attributes:nil error:nil];
+    [fm createSymbolicLinkAtPath:[thumbs stringByAppendingPathComponent:@"linked"] withDestinationPath:web error:nil];
+    NSString *keep = [projectDir stringByAppendingPathComponent:@"keep.txt"];
+    [@"keep" writeToFile:keep atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    [state updateProject:@"plant" values:@{TLStateFrameCount: @1, TLStateLastFile: @"projects/plant/frames/20261115/120000.jpg",
+                                         TLStateLastEncodeFile: @"projects/plant/videos/large.mp4"} error:nil];
+    int mediaLock = TLTryLockProjectMedia(root, NO);
+    EXPECT(mediaLock >= 0, "manual command can claim shared media lock");
+    EXPECT([TLWebCall(port, @"DELETE", content, nil, cookie, YES) containsString:@" 409 "], "active manual command blocks content deletion");
+    if (mediaLock >= 0) { close(mediaLock); }
+    EXPECT([TLWebCall(port, @"DELETE", content, nil, cookie, YES) containsString:@" 200 "], "delete paused project content");
+    for (NSString *kind in @[@"frames", @"thumbs", @"videos"]) {
+        EXPECT(![fm fileExistsAtPath:[projectDir stringByAppendingPathComponent:kind]], "media directory is gone");
+    }
+    EXPECT([fm fileExistsAtPath:keep] && [fm fileExistsAtPath:outside] && [fm fileExistsAtPath:server.indexFileOverride], "non-media files and symlink targets are preserved");
+    EXPECT([state integerForProject:@"plant" key:TLStateFrameCount] == 0 &&
+           [state stringForProject:@"plant" key:TLStateLastFile].length == 0 &&
+           [state stringForProject:@"plant" key:TLStateLastEncodeFile].length == 0, "media state is reset");
+    EXPECT([TLWebCall(port, @"GET", @"/api/projects/plant/frames", nil, cookie, NO) containsString:@" 200 "], "project remains configured");
+    EXPECT([TLWebCall(port, @"DELETE", content, nil, cookie, YES) containsString:@" 200 "], "empty project content can be deleted again");
     [server stop];
 }

@@ -527,6 +527,8 @@ static void TLTestWeb(void) {
     EXPECT([resumed containsString:@" 200 "], "resume");
     TLConfig *reloaded = [TLConfig configWithContentsOfFile:configPath error:&error];
     EXPECT(reloaded.projects[0].enabled, "resume written");
+    NSString *activeContent = TLWebCall(port, @"DELETE", @"/api/projects/plant/content", nil, cookie, YES);
+    EXPECT([activeContent containsString:@" 409 "], "enabled project content cannot be deleted");
     NSString *created = TLWebCall(port, @"POST", @"/api/projects", @"{\"id\":\"sprout\",\"name\":\"新芽\"}", cookie, YES);
     EXPECT([created containsString:@" 200 "], "create project");
     NSString *listed = TLWebCall(port, @"GET", @"/api/projects", nil, cookie, NO);

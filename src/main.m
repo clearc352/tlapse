@@ -216,6 +216,14 @@ static int TLCmdStatus(NSString *configPath) {
     return 0;
 }
 
+static int TLLockMediaForCommand(TLConfig *config) {
+    int lock = TLTryLockProjectMedia(config.storageRoot, NO);
+    if (lock < 0) {
+        fprintf(stderr, "%s\n", errno == EWOULDBLOCK ? "正在删除项目内容，请稍后重试" : "无法锁定项目存储");
+    }
+    return lock;
+}
+
 static int TLCmdSnap(NSString *configPath, NSString *projectID) {
     int exitCode = 0;
     TLConfig *config = TLLoadConfig(configPath, &exitCode);
@@ -248,6 +256,8 @@ static int TLCmdSnap(NSString *configPath, NSString *projectID) {
         return 3;
     }
     TLLogSetup([config.storageRoot stringByAppendingPathComponent:@"logs/tlapsed.log"]);
+    int mediaLock = TLLockMediaForCommand(config);
+    if (mediaLock < 0) { return 2; }
     if (!project.enabled) {
         TLLogInfo(@"项目 %@ 当前暂停，这次按手动拍摄执行", project.projectID);
     }
@@ -278,6 +288,7 @@ static int TLCmdSnap(NSString *configPath, NSString *projectID) {
         CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.5, false);
     }
     [state recordCaptureResult:result projectID:project.projectID];
+    close(mediaLock);
     if (result.outcome == TLCaptureOutcomeSaved) {
         printf("%s\n", result.message.UTF8String);
         return 0;
@@ -339,7 +350,10 @@ static int TLCmdEncode(NSString *configPath, NSString *projectID, NSString *day)
     TLState *state = [[TLState alloc] initWithPath:[config.storageRoot stringByAppendingPathComponent:@"state.json"]];
     TLEncoder *encoder = [[TLEncoder alloc] init];
     TLUploader *uploader = [[TLUploader alloc] initWithState:state storageRoot:config.storageRoot];
+    int mediaLock = TLLockMediaForCommand(config);
+    if (mediaLock < 0) { return 2; }
     TLEncodeResult *result = TLPerformEncodeJob(encoder, uploader, state, config, project, TLDateFromDay(day), [NSTimeZone localTimeZone]);
+    close(mediaLock);
     if (result.succeeded) {
         printf("%s\n", result.message.UTF8String);
         return 0;

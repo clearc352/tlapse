@@ -6,6 +6,7 @@
 #import "TLJobs.h"
 #import "TLLog.h"
 #import "TLRules.h"
+#import "TLScheduler.h"
 #import "TLState.h"
 #import "TLSupport.h"
 #import "TLUploader.h"
@@ -13,6 +14,7 @@
 
 #import <arpa/inet.h>
 #import <ctype.h>
+#import <dirent.h>
 #import <errno.h>
 #import <stdlib.h>
 #import <fcntl.h>
@@ -20,6 +22,7 @@
 #import <net/if.h>
 #import <netdb.h>
 #import <netinet/in.h>
+#import <pthread.h>
 #import <signal.h>
 #import <string.h>
 #import <sys/stat.h>
@@ -315,6 +318,56 @@ static int TLOpenWebFile(NSString *root, NSArray<NSString *> *components) {
     return directory;
 }
 
+static BOOL TLRemoveWebTree(int parent, const char *name) {
+    struct stat info;
+    if (fstatat(parent, name, &info, AT_SYMLINK_NOFOLLOW) != 0) {
+        return errno == ENOENT;
+    }
+    if (!S_ISDIR(info.st_mode)) {
+        return unlinkat(parent, name, 0) == 0 || errno == ENOENT;
+    }
+    int fd = openat(parent, name, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0) { return errno == ENOENT; }
+    DIR *directory = fdopendir(fd);
+    if (!directory) {
+        close(fd);
+        return NO;
+    }
+    BOOL ok = YES;
+    for (;;) {
+        errno = 0;
+        struct dirent *entry = readdir(directory);
+        if (!entry) {
+            ok = errno == 0;
+            break;
+        }
+        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) { continue; }
+        if (!TLRemoveWebTree(fd, entry->d_name)) {
+            ok = NO;
+            break;
+        }
+    }
+    closedir(directory);
+    return ok && (unlinkat(parent, name, AT_REMOVEDIR) == 0 || errno == ENOENT);
+}
+
+static BOOL TLRemoveProjectMedia(NSString *root, NSString *projectID) {
+    int directory = open(root.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (directory < 0) { return errno == ENOENT; }
+    for (NSString *component in @[@"projects", projectID]) {
+        int next = openat(directory, component.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+        int openError = errno;
+        close(directory);
+        if (next < 0) { return openError == ENOENT; }
+        directory = next;
+    }
+    BOOL ok = TLRemoveWebTree(directory, "frames") &&
+              TLRemoveWebTree(directory, "thumbs") &&
+              TLRemoveWebTree(directory, "videos");
+    close(directory);
+    return ok;
+}
+
 static BOOL TLRangeNumber(NSString *text, unsigned long long *number) {
     const char *bytes = text.UTF8String;
     if (!bytes || !bytes[0]) { return NO; }
@@ -383,7 +436,9 @@ static BOOL TLVideoRange(NSString *range, unsigned long long size,
 @property (nonatomic, copy) NSString *boundSignature;
 @end
 
-@implementation TLWebServer
+@implementation TLWebServer {
+    pthread_rwlock_t _mediaLock;
+}
 
 - (instancetype)initWithConfigPath:(NSString *)path state:(TLState *)state snap:(TLWebSnap)snap {
     self = [super init];
@@ -398,6 +453,7 @@ static BOOL TLVideoRange(NSString *range, unsigned long long size,
         _sessionOrder = [NSMutableArray array];
         _attempts = [NSMutableDictionary dictionary];
         _stateLock = [[NSLock alloc] init];
+        pthread_rwlock_init(&_mediaLock, NULL);
         _slots = dispatch_semaphore_create(12);
         _listenAddresses = @[];
         _hostAddresses = @[];
@@ -407,6 +463,10 @@ static BOOL TLVideoRange(NSString *range, unsigned long long size,
         });
     }
     return self;
+}
+
+- (void)dealloc {
+    pthread_rwlock_destroy(&_mediaLock);
 }
 
 - (BOOL)applyConfig:(TLConfig *)config error:(NSError **)error {
@@ -1230,6 +1290,9 @@ static BOOL TLWriteAll(int fd, const void *bytes, size_t length) {
     if (parts.count == 3 && [method isEqualToString:@"DELETE"]) {
         return [self deleteProject:safeID];
     }
+    if (parts.count == 4 && [parts[3] isEqualToString:@"content"] && [method isEqualToString:@"DELETE"]) {
+        return [self deleteProjectContent:safeID];
+    }
     if (parts.count == 4 && [parts[3] isEqualToString:@"pause"] && [method isEqualToString:@"POST"]) {
         return [self setProject:safeID enabled:NO];
     }
@@ -1237,7 +1300,7 @@ static BOOL TLWriteAll(int fd, const void *bytes, size_t length) {
         return [self setProject:safeID enabled:YES];
     }
     if (parts.count == 4 && [parts[3] isEqualToString:@"snap"] && [method isEqualToString:@"POST"]) {
-        return [self snapProject:safeID];
+        return [self withMediaJob:^TLWebResponse *{ return [self snapProject:safeID]; }];
     }
     if (parts.count == 4 && [parts[3] isEqualToString:@"latest.jpg"] && [method isEqualToString:@"GET"]) {
         return [self latestImage:safeID];
@@ -1246,13 +1309,13 @@ static BOOL TLWriteAll(int fd, const void *bytes, size_t length) {
         return [self frames:safeID date:query[@"date"]];
     }
     if (parts.count == 6 && [parts[3] isEqualToString:@"frames"] && [method isEqualToString:@"DELETE"]) {
-        return [self deleteFrame:safeID day:parts[4] name:parts[5]];
+        return [self withMediaJob:^TLWebResponse *{ return [self deleteFrame:safeID day:parts[4] name:parts[5]]; }];
     }
     if (parts.count == 4 && [parts[3] isEqualToString:@"videos"] && [method isEqualToString:@"GET"]) {
         return [self videos:safeID];
     }
     if (parts.count == 4 && [parts[3] isEqualToString:@"encode"] && [method isEqualToString:@"POST"]) {
-        return [self encodeProject:safeID];
+        return [self withMediaJob:^TLWebResponse *{ return [self encodeProject:safeID]; }];
     }
     if ([method isEqualToString:@"GET"] && parts.count >= 5 && [parts[3] isEqualToString:@"media"]) {
         return [self media:safeID parts:parts query:query headers:headers];
@@ -1378,6 +1441,65 @@ static BOOL TLWriteAll(int fd, const void *bytes, size_t length) {
     }
     [self reloadWrittenConfig];
     return [self json:200 object:@{@"deleted": @YES, @"keptFiles": @YES}];
+}
+
+- (TLWebResponse *)withMediaJob:(TLWebResponse *(^)(void))job {
+    if (pthread_rwlock_tryrdlock(&_mediaLock) != 0) {
+        return [self jsonError:409 message:@"正在删除项目内容，请稍后重试"];
+    }
+    TLWebResponse *response = job();
+    pthread_rwlock_unlock(&_mediaLock);
+    return response;
+}
+
+- (TLWebResponse *)deleteProjectContent:(NSString *)projectID {
+    if (pthread_rwlock_trywrlock(&_mediaLock) != 0) {
+        return [self jsonError:409 message:@"正在拍照、合成或删除内容，请稍后重试"];
+    }
+    __block TLWebResponse *response = nil;
+    dispatch_block_t removeContent = ^{
+        TLConfig *config = [self currentConfig];
+        TLProject *project = [config projectWithID:projectID];
+        if (!project) {
+            response = [self jsonError:404 message:@"没有这个项目"];
+            return;
+        }
+        if (project.enabled) {
+            response = [self jsonError:409 message:@"请先暂停项目拍摄"];
+            return;
+        }
+        for (TLProject *other in config.projects) {
+            if (other != project && [other.projectID caseInsensitiveCompare:projectID] == NSOrderedSame) {
+                response = [self jsonError:409 message:@"另一个项目的 ID 仅大小写不同，无法安全删除"];
+                return;
+            }
+        }
+        int cliLock = TLTryLockProjectMedia(config.storageRoot, YES);
+        if (cliLock < 0) {
+            response = errno == EWOULDBLOCK
+                ? [self jsonError:409 message:@"正在拍照或合成，请稍后重试"]
+                : [self jsonError:500 message:@"无法锁定项目存储"];
+            return;
+        }
+        if (!TLRemoveProjectMedia(config.storageRoot, projectID)) {
+            response = [self jsonError:500 message:@"无法删除所有项目内容，请检查存储后重试"];
+        } else if (![self.state updateProject:projectID values:@{
+            TLStateFrameCount: @0, TLStateLastFile: @"", TLStateLastCaptureAt: @"", TLStateLastEncodeFile: @"",
+        } error:nil]) {
+            response = [self jsonError:500 message:@"项目文件已删除，但保存项目状态失败，请重试"];
+        } else {
+            response = [self json:200 object:@{@"deleted": @YES}];
+        }
+        close(cliLock);
+    };
+    TLScheduler *scheduler = self.scheduler;
+    if (!scheduler) {
+        removeContent();
+    } else if (![scheduler withPausedProject:projectID perform:removeContent]) {
+        response = [self jsonError:409 message:@"请先暂停项目，并等待拍照或合成完成"];
+    }
+    pthread_rwlock_unlock(&_mediaLock);
+    return response;
 }
 
 - (NSMutableDictionary *)mutableProject:(NSString *)projectID inRoot:(NSMutableDictionary *)root {

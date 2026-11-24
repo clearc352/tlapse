@@ -177,6 +177,25 @@ BOOL TLDropToMobileUser(NSString *storageRoot, NSError **error) {
     return YES;
 }
 
+int TLTryLockProjectMedia(NSString *root, BOOL exclusive) {
+    int directory = open(root.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (directory < 0) { return -1; }
+    int fd = openat(directory, "media.lock", O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK, 0644);
+    int result = errno;
+    close(directory);
+    if (fd < 0) {
+        errno = result;
+        return -1;
+    }
+    if (flock(fd, (exclusive ? LOCK_EX : LOCK_SH) | LOCK_NB) != 0) {
+        result = errno;
+        close(fd);
+        errno = result;
+        return -1;
+    }
+    return fd;
+}
+
 @implementation TLFileLock {
     int _fd;
     BOOL _held;
