@@ -42,7 +42,6 @@ async function submit() {
       <p class="phone"><Icon name="phone" :size="14" />iPhone 6 <span>·</span> 局域网连接</p>
       <details class="help"><summary>连接帮助</summary><p>口令为 config.json 中的 server.token。仅在可信 Wi-Fi、热点或受控 VPN 内使用，连接未加密，不要转发端口到公网。</p></details>
     </section>
-    <a class="license" href="./MiSans-License.pdf" target="_blank" rel="noopener">MiSans</a>
   </div>
 </template>
 <style scoped>
@@ -56,6 +55,6 @@ input { background: none; border: none; width: 100%; min-width: 0; padding: 5px 
 .enter { background: var(--lime) !important; color: var(--fg) !important; border-color: var(--lime) !important; width: 46px !important; }
 .error { color: var(--danger); font-size: 12px; padding: 12px 18px 0; }
 .phone { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 32px; font-size: 10px; color: var(--fg-muted); } .phone span { margin: 0 3px; }
-.help { font-size: 10px; color: var(--fg-muted); text-align: center; margin-top: 18px; } .help summary { cursor: pointer; } .help p { text-align: left; margin-top: 14px; line-height: 1.9; } .license { position: absolute; bottom: 24px; font-size: 9px; color: var(--fg-muted); }
+.help { font-size: 10px; color: var(--fg-muted); text-align: center; margin-top: 18px; } .help summary { cursor: pointer; } .help p { text-align: left; margin-top: 14px; line-height: 1.9; }
 @media (max-width: 680px) { input { font-size: 16px; } .wordmark h1 { font-size: 52px; } }
 </style>
