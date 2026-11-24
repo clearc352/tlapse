@@ -17,4 +17,9 @@ if ! launchctl load -w /Library/LaunchDaemons/com.ddxyl.tlapsed.plist; then
     echo "tlapsed 已安装，但 launchctl load 失败。越狱完成后执行："
     echo "  launchctl load -w /Library/LaunchDaemons/com.ddxyl.tlapsed.plist"
 fi
+if command -v uicache >/dev/null 2>&1; then
+    uicache -p /Applications/Tlapse.app >/dev/null 2>&1 || uicache || true
+else
+    echo "帧轨已安装；如果主屏幕未显示图标，安装 uicache 后执行 uicache -p /Applications/Tlapse.app。"
+fi
 exit 0

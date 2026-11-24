@@ -2,7 +2,7 @@ Package: com.ddxyl.tlapse
 Name: tlapse
 Version: 0.3.2
 Architecture: iphoneos-arm
-Description: Timelapse daemon and LAN web console for a jailbroken iPhone
+Description: Timelapse daemon, native app and LAN web console for a jailbroken iPhone
 Maintainer: ddxyl <ddxyl@localhost>
 Author: ddxyl
 Section: Utilities
