@@ -36,8 +36,13 @@ static UITableViewCell *TLCell(UITableView *table, NSString *title, NSString *su
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = UIColor.blackColor;
+    if (@available(iOS 13.0, *)) {
+        self.view.backgroundColor = UIColor.systemBackgroundColor;
+    } else {
+        self.view.backgroundColor = UIColor.whiteColor;
+    }
     UIImageView *imageView = [[UIImageView alloc] init];
+    imageView.backgroundColor = UIColor.blackColor;
     imageView.contentMode = UIViewContentModeScaleAspectFit;
     imageView.accessibilityLabel = self.title;
     imageView.isAccessibilityElement = YES;
@@ -55,7 +60,7 @@ static UITableViewCell *TLCell(UITableView *table, NSString *title, NSString *su
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
         [imageView.topAnchor constraintEqualToAnchor:safe.topAnchor],
-        [imageView.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
+        [imageView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
         [imageView.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
         [imageView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
         [status.centerXAnchor constraintEqualToAnchor:safe.centerXAnchor],
